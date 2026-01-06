@@ -128,4 +128,4 @@ For large plans with sub-plans, list the linked sub-plan documents.
 
 State after deepening: "Plan saved to `{path}`. Would you like advisor review before implementation?"
 
-State after review (if done): "Plan reviewed and finalized. Ready for `/rpi/implement {plan-path}`."
+State after review (if done): "Plan reviewed and finalized. Clear chat and run `/rpi:implement {plan-path}`."

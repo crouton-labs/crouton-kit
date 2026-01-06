@@ -30,7 +30,6 @@ Execute the implementation plan by delegating work to agents. Maximize paralleli
 **Delegation strategy:**
 - Use `devcore:junior-engineer` for well-specified, bounded tasks
 - Use `devcore:programmer` for tasks requiring pattern analysis or multi-file changes
-- Always use `run_in_background: true`
 
 **Dependency management:**
 - Launch all tasks with no dependencies immediately (parallel batch)

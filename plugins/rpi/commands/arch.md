@@ -33,10 +33,11 @@ Briefly explore the codebase to understand:
 
 Always share:
 - What you found in the codebase
-- A concrete proposal for how the feature should work
+- A concrete proposal with your reasoning
 - Relevant file paths that will be involved
+- Trade-offs you see or where you're less certain
 
-Then ask: **"Does this need further discussion, or should I capture this as the spec?"**
+Share your perspective: what's clear, what's open, what you'd lean toward and why. E.g., "I'm confident about X, but Y could go either way depending on how much we value Z."
 
 ### 3. Design Through Conversation (if needed)
 
@@ -51,6 +52,8 @@ Ambiguity can be technical, architectural, or design-related (UI/UX choices coun
 ### 4. Save Specification
 
 When the feature is well-defined, save to `{cwd}/.claude/specs/{topic-name}.spec.md`
+
+**The spec captures decisions, not questions.** All trade-offs and ambiguity from the conversation should be resolved before saving. The spec is the settled contract for implementation.
 
 **Spec format:**
 - **Summary** — One paragraph describing the feature
@@ -84,7 +87,7 @@ Only run if the user confirms, for large multi-domain features.
 
 ### 1. Investigate Thoroughly
 
-- Spawn `Explore` agents with `run_in_background: true` to investigate different areas in parallel
+- Spawn `Explore` agents to investigate different areas in parallel
 - Each agent focuses on a specific domain (e.g., data models, API patterns, UI components)
 - Synthesize findings into focused context documents
 

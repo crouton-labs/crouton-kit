@@ -1,0 +1,1 @@
+- gates on implementation. Plan should have checkpoints on where we can validate that implementation so far is working and a code-review can optionally be done.

@@ -11,27 +11,27 @@ Review my changes and commit them safely.
 
 **Branches:**
 ```
-!`git branch -a 2>/dev/null | head -20`
+!`git branch -a 2>/dev/null | head -20 || echo "Not a git repository"`
 ```
 
 **Status:**
 ```
-!`git status --short`
+!`git status --short 2>/dev/null || echo "Not a git repository"`
 ```
 
 **Staged changes:**
 ```
-!`git diff --cached --stat`
+!`git diff --cached --stat 2>/dev/null`
 ```
 
 **Unstaged changes:**
 ```
-!`git diff --stat`
+!`git diff --stat 2>/dev/null`
 ```
 
 **Recent commits (style reference):**
 ```
-!`git log --oneline -8`
+!`git log --oneline -8 2>/dev/null || echo "No commits yet"`
 ```
 
 ## Phase 1: Security & Quality Review

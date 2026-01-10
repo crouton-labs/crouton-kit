@@ -237,16 +237,35 @@ def get_ancestor_dirs(start_dir: str) -> List[str]:
     return dirs
 
 
-def load_rules(event: Optional[str] = None) -> List[Rule]:
-    """Load rules from .claude/ directories walking up from CWD, plus global ~/.claude/."""
+def load_rules(event: Optional[str] = None, context_path: Optional[str] = None) -> List[Rule]:
+    """
+    Load rules from .claude/ directories.
+
+    Searches:
+    1. context_path's directory and ancestors (if provided, e.g., file being edited)
+    2. CWD and ancestors
+    3. Global ~/.claude/
+
+    This allows subproject rules to apply when editing files in subdirectories.
+    """
     rules = []
 
     # Build search paths: walk up from CWD, then global
     search_paths = []
 
+    # If context_path provided (e.g., file being edited), search from its directory first
+    if context_path:
+        context_dir = os.path.dirname(os.path.abspath(context_path))
+        for ancestor in get_ancestor_dirs(context_dir):
+            path = os.path.join(ancestor, '.claude', 'hookify.*.local.md')
+            if path not in search_paths:
+                search_paths.append(path)
+
     # Add ancestor directories (CWD and parents)
     for ancestor in get_ancestor_dirs(os.getcwd()):
-        search_paths.append(os.path.join(ancestor, '.claude', 'hookify.*.local.md'))
+        path = os.path.join(ancestor, '.claude', 'hookify.*.local.md')
+        if path not in search_paths:
+            search_paths.append(path)
 
     # Add global ~/.claude/ (may already be included if we're under home)
     global_path = os.path.join(os.path.expanduser('~'), '.claude', 'hookify.*.local.md')

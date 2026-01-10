@@ -18,6 +18,7 @@ def main():
         input_data['hook_event_name'] = 'PostToolUse'
 
         tool_name = input_data.get('tool_name', '')
+        tool_input = input_data.get('tool_input', {})
 
         if tool_name == 'Bash':
             event = 'bash'
@@ -26,8 +27,11 @@ def main():
         else:
             event = 'all'
 
-        rules = load_rules(event=event)
-        all_rules = load_rules(event='all')
+        # Extract file path for context-aware rule loading (subproject rules)
+        context_path = tool_input.get('file_path') or tool_input.get('notebook_path')
+
+        rules = load_rules(event=event, context_path=context_path)
+        all_rules = load_rules(event='all', context_path=context_path)
         rules.extend([r for r in all_rules if r not in rules])
 
         # Only process warning rules

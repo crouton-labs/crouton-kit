@@ -18,6 +18,7 @@ def main():
         input_data['hook_event_name'] = 'PreToolUse'
 
         tool_name = input_data.get('tool_name', '')
+        tool_input = input_data.get('tool_input', {})
 
         # Map tool to event type
         if tool_name == 'Bash':
@@ -27,9 +28,12 @@ def main():
         else:
             event = 'all'
 
-        rules = load_rules(event=event)
+        # Extract file path for context-aware rule loading (subproject rules)
+        context_path = tool_input.get('file_path') or tool_input.get('notebook_path')
+
+        rules = load_rules(event=event, context_path=context_path)
         # Also get 'all' rules
-        all_rules = load_rules(event='all')
+        all_rules = load_rules(event='all', context_path=context_path)
         rules.extend([r for r in all_rules if r not in rules])
 
         # PreToolUse only handles blocks (warnings handled by PostToolUse)

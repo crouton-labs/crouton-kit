@@ -1,7 +1,6 @@
 ---
 description: Review changes, create logical commits, and push safely
-model: haiku
-argument-hint: [commit scope]
+argument-hint: commit scope
 disable-model-invocation: true
 ---
 

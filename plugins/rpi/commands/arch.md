@@ -1,6 +1,7 @@
 ---
 description: Start new feature - define spec and gather context
 argument-hint: <topic or description>
+disable-model-invocation: true
 ---
 # Feature Specification
 

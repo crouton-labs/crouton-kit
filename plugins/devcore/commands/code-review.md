@@ -1,6 +1,7 @@
 ---
 description: Comprehensive code review with scaled agent analysis
 argument-hint: [scope|plan-path]
+disable-model-invocation: true
 ---
 
 Review code changes. Scale depth and strategy based on change size.

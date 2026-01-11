@@ -2,6 +2,7 @@
 description: Validate conclusions/findings with independent verification agents
 allowed-tools: Task(*), Read(*), Grep(*), Glob(*)
 argument-hint: [context]
+disable-model-invocation: true
 ---
 
 Validate findings or conclusions from prior analysis. Each major issue gets independent verification.

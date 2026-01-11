@@ -1,6 +1,7 @@
 ---
 description: After /rpi/plan - execute with parallel agents
 argument-hint: <plan-path or description>
+disable-model-invocation: true
 ---
 # Implement Plan
 

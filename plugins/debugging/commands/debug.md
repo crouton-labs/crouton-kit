@@ -25,7 +25,7 @@ Based on the issue, clarify:
 - **Actual behavior** — What's broken
 - **Reproduction steps** — How to trigger the issue
 - **Context** — Feature ID (F-##), story ID (US-###), error messages, or conditions
-- 
+
 ## Step 2: Initial Investigation
 **Default approach: Investigate yourself first unless you specify "use-agents" or this follows a major feature implementation, in which case delegate to a senior-engineer agent.**
 

@@ -2,6 +2,7 @@
 description: Audit codebase for structural issues and design stupidisms
 allowed-tools: Task(*), Glob(*), Grep(*), Read(*)
 argument-hint: [path]
+disable-model-invocation: true
 ---
 
 Audit for "design stupidisms"—code that works but doesn't make sense. Focus on structural waste, not style.

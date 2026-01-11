@@ -2,6 +2,7 @@
 description: Teach and advise on best practices given a scenario
 allowed-tools: Task(*), Glob(*), Grep(*), Read(*), Search(*)
 argument-hint: <further advice>
+disable-model-invocation: true
 ---
 
 **Input**: $ARGUMENTS

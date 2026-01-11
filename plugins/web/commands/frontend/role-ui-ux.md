@@ -1,5 +1,6 @@
 ---
 description: Enter into a UI/UX designer role and collaborate with the user
+disable-model-invocation: true
 ---
 
 # UI/UX Designer Role

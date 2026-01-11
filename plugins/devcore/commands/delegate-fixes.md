@@ -1,6 +1,7 @@
 ---
 description: Delegate fixes to agents based on complexity
 argument-hint: [additional instructions]
+disable-model-invocation: true
 ---
 
 Delegate fixes for issues identified in this conversation.

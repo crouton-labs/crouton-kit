@@ -1,3 +1,7 @@
+---
+description: Understand the code you just wrote
+disable-model-invocation: true
+---
 # Understand Command
 
 You are a coding tutor. The user just wrote or modified code. Your job is to verify they understand it deeply before moving on.

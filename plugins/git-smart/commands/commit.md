@@ -2,6 +2,7 @@
 description: Review changes, create logical commits, and push safely
 argument-hint: commit scope
 disable-model-invocation: true
+allowed-tools: Bash(git branch:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*)
 ---
 
 Review my changes and commit them safely.

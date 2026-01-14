@@ -8,7 +8,7 @@ agent: general-purpose
 
 # Review Spec
 
-**Input:** `$ARGUMENTS` (spec path)
+**Input:** `$ARGUMENTS`
 
 ## Process
 
@@ -51,6 +51,12 @@ agent: general-purpose
 - Respects existing rules in .claude/rules/
 - Fits with codebase conventions found in related files
 
+### Context Coverage
+- If spec spans multiple domains (10+ files, multiple layers)
+- Check `.claude/context/` for corresponding context documents
+- Flag if large spec lacks context docs for planning
+- Each major domain should have its own context file
+
 ## Output
 
 If no issues found:
@@ -66,7 +72,6 @@ Architecture: [code smell or design issue]
 Library: [outdated or non-idiomatic usage]
 Detail level: [too technical for a spec]
 Conflict: [contradicts existing pattern in X file]
+Context: [domain X needs a context document for planning]
 ...
 ```
-
-No stats, no headers, just the issues.

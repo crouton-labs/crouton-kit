@@ -77,31 +77,9 @@ Create a comprehensive, actionable implementation plan based on the feature spec
 - Design for maintainability and testability
 - Make dependencies and side effects explicit
 
-## Plan Quality Evaluation
-
-After writing the plan document, evaluate it for **iterative deepening**.
-
-### The Goldilocks Test
-
-Each section should be:
-- **Open enough** to trust the implementing agent's judgment on details
-- **Granular enough** that implementation path is never unknown or unexplored
-
-Sections fail this test when they acknowledge complexity without resolving it, defer decisions to implementation time, or leave the "how" genuinely unclear.
-
-### Iterative Deepening
-
-For sections that fail evaluation:
-1. Spawn a `Plan` agent focused specifically on that section
-2. Provide the section content + relevant spec/context
-3. Agent produces deeper breakdown
-4. Either update the section inline or create a linked sub-plan in `.claude/plans/`
-
-For plans with many weak sections, consider spawning one `Plan` agent per phase to deepen in parallel.
-
 ## Post-Plan Review
 
-After the plan is finalized (including any deepening), offer advisor review.
+After the plan is finalized, offer advisor review.
 
 ### Process
 
@@ -119,7 +97,11 @@ Scale advisor count to plan scope—larger changes warrant more review perspecti
 
 ### After Review
 
-Summarize findings. Revise plan to address significant concerns, re-deepening sections if needed.
+Summarize findings. Revise plan to address significant concerns.
+
+After revisions are complete, run `/rpi:review-plan {spec-path} {plan-path}` to validate coverage.
+
+If validation fails, address the gaps and re-run validation.
 
 ## Output
 
@@ -127,6 +109,6 @@ Save the master plan to the project's .claude directory at `.claude/plans/` with
 
 For large plans with sub-plans, list the linked sub-plan documents.
 
-State after deepening: "Plan saved to `{path}`. Would you like advisor review before implementation?"
+State after saving: "Plan saved to `{path}`. Would you like advisor review before implementation?"
 
-State after review (if done): "Plan reviewed and finalized. Clear chat and run `/rpi:implement {plan-path}`."
+State after validation passes: "Plan validated. Clear chat and run `/rpi:implement {plan-path}`."

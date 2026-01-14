@@ -64,13 +64,41 @@ conditions:
 Ensure this file is in .gitignore and never committed to version control.
 ```
 
+### Diff-Based Rule (Inspect Changes)
+
+```markdown
+---
+name: warn-removed-tests
+enabled: true
+event: diff
+action: warn
+conditions:
+  - field: file_path
+    operator: regex_match
+    pattern: \.test\.(ts|js)$
+  - field: diff
+    operator: regex_match
+    pattern: ^-.*\b(it|test|describe)\s*\(
+---
+
+⚠️ **Test removal detected**
+
+You're removing test cases. Make sure this is intentional and that test
+coverage remains adequate.
+```
+
+The `diff` field contains a unified diff format where:
+- Lines starting with `-` were removed
+- Lines starting with `+` were added
+- Use regex to match specific change patterns
+
 ## Frontmatter Fields
 
 | Field | Required | Values | Description |
 |-------|----------|--------|-------------|
 | `name` | Yes | kebab-case string | Unique identifier (e.g., `warn-dangerous-rm`) |
 | `enabled` | Yes | `true` \| `false` | Whether rule is active |
-| `event` | Yes | `bash` \| `file` \| `stop` \| `prompt` \| `all` | Which lifecycle events to match |
+| `event` | Yes | `bash` \| `file` \| `diff` \| `stop` \| `prompt` \| `all` | Which lifecycle events to match |
 | `action` | No | `warn` \| `block` | Default: `warn`. Block prevents operation |
 | `pattern` | No | regex string | Simple pattern for single-condition rules |
 | `conditions` | No | array | Complex multi-condition rules (see below) |
@@ -96,6 +124,7 @@ conditions:
 |-------|-------------|------------------|-----------|
 | `bash` | Bash tool execution | `command` | Block dangerous commands (`rm -rf`, `chmod 777`) |
 | `file` | Edit/Write/MultiEdit | `file_path`, `new_text`, `old_text`, `content` | Warn on code patterns (`console.log`), sensitive files |
+| `diff` | Edit tool | `diff`, `file_path`, `old_string`, `new_string` | Match changes in unified diff format (`+added`, `-removed`) |
 | `stop` | Agent attempts to stop | `reason`, `transcript` | Require tests before completion |
 | `prompt` | User submits prompt | `prompt` | Context injection based on user input |
 | `all` | All events | Field depends on tool | Cross-cutting concerns |
@@ -125,6 +154,7 @@ conditions:
 |-------|----------------------|------------------|
 | `bash` | `command` | `command` |
 | `file` | `new_text` | `file_path`, `new_text`, `old_text`, `content` |
+| `diff` | `diff` | `diff`, `file_path`, `old_string`, `new_string` |
 | `prompt` | `prompt` | `prompt` |
 | `stop` | `content` | `reason`, `transcript` |
 | `all` | `content` | Context-dependent |

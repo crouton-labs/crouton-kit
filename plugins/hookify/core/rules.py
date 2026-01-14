@@ -114,6 +114,8 @@ class Rule:
                 cond_field = 'command'
             elif event == 'file':
                 cond_field = 'new_text'
+            elif event == 'diff':
+                cond_field = 'diff'
             elif event == 'prompt':
                 cond_field = 'prompt'
             else:
@@ -378,6 +380,30 @@ def rule_matches(rule: Rule, input_data: Dict[str, Any]) -> bool:
     return True
 
 
+def compute_diff(old_string: str, new_string: str) -> str:
+    """
+    Compute a unified diff between old and new strings.
+
+    Returns a diff format showing removed lines (prefixed with -)
+    and added lines (prefixed with +).
+    """
+    import difflib
+
+    old_lines = old_string.splitlines(keepends=True)
+    new_lines = new_string.splitlines(keepends=True)
+
+    # Generate unified diff
+    diff = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile='old',
+        tofile='new',
+        lineterm=''
+    )
+
+    return ''.join(diff)
+
+
 def extract_field(field: str, tool_name: str, tool_input: Dict, input_data: Dict) -> Optional[str]:
     """Extract field value from input."""
     if field in tool_input:
@@ -397,6 +423,17 @@ def extract_field(field: str, tool_name: str, tool_input: Dict, input_data: Dict
         return tool_input.get('old_string', '')
     if field == 'content':
         return tool_input.get('content', '') or tool_input.get('new_string', '')
+    if field == 'diff':
+        # Compute diff from old_string and new_string (Edit tool)
+        old_string = tool_input.get('old_string', '')
+        new_string = tool_input.get('new_string', '')
+        if old_string or new_string:
+            return compute_diff(old_string, new_string)
+        # For Write tool, the diff is just the new content (everything is added)
+        content = tool_input.get('content', '')
+        if content:
+            return '\n'.join(f'+{line}' for line in content.splitlines())
+        return None
 
     return None
 

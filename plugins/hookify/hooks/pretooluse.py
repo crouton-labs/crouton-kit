@@ -28,10 +28,19 @@ def main():
         else:
             event = 'all'
 
+        # Edit tool also triggers 'diff' event (has old_string/new_string)
+        diff_event = 'diff' if tool_name == 'Edit' else None
+
         # Extract file path for context-aware rule loading (subproject rules)
         context_path = tool_input.get('file_path') or tool_input.get('notebook_path')
 
         rules = load_rules(event=event, context_path=context_path)
+
+        # Load 'diff' rules for Edit tool
+        if diff_event:
+            diff_rules = load_rules(event=diff_event, context_path=context_path)
+            rules.extend([r for r in diff_rules if r not in rules])
+
         # Also get 'all' rules
         all_rules = load_rules(event='all', context_path=context_path)
         rules.extend([r for r in all_rules if r not in rules])

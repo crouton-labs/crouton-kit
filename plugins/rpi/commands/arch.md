@@ -69,12 +69,16 @@ When the feature is well-defined, save to `{cwd}/.claude/specs/{topic-name}.spec
 
 ## After Saving the Spec
 
+Run `/rpi:review-spec {spec-path}` to validate the spec.
+
+If validation fails, address the issues and re-run validation.
+
 ### Evaluate Need for Research
 
 **Small features** (touches ~10 or fewer files):
 - The spec's "Related files" section is sufficient context
 - No separate research documents needed
-- State: "Specification saved to `{path}`. Clear chat and run `/rpi:plan {spec-path}`."
+- State after validation passes: "Spec validated. Clear chat and run `/rpi:plan {spec-path}`."
 
 **Large features** (touches 10+ files across multiple domains):
 - Offer: "This feature spans multiple areas. Would you like me to create dedicated context documents for planning?"
@@ -112,4 +116,4 @@ Documents should be:
 
 List context documents created with brief summaries.
 
-State: "Spec and context complete. Clear chat and run `/rpi:plan {spec-path}`."
+State after validation passes: "Spec and context validated. Clear chat and run `/rpi:plan {spec-path}`."

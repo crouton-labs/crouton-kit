@@ -1,0 +1,72 @@
+---
+name: review-spec
+description: Validate feature specs for relevance, edge cases, and compatibility with existing patterns. Use after creating a spec.
+user-invocable: false
+context: fork
+agent: general-purpose
+---
+
+# Review Spec
+
+**Input:** `$ARGUMENTS` (spec path)
+
+## Process
+
+1. **Read the spec file**
+
+2. **Read existing patterns**
+   - CLAUDE.md (project root and .claude/)
+   - .claude/rules/*.md
+   - Any referenced "Related files" in the spec
+
+3. **Validate against criteria**
+
+### Relevance
+- Spec stays focused on the feature
+- No tangential details or scope creep
+- Clear boundaries on what's in/out
+
+### Edge Cases
+- Error states covered
+- Boundary conditions addressed
+- Failure modes considered
+
+### Architecture Quality
+- No code smells in proposed architecture
+- Abstractions are appropriate (not over/under-engineered)
+- Integration points are clean
+
+### Library Usage
+- If external libraries mentioned, verify idiomatic usage
+- Flag outdated patterns or deprecated approaches
+- Check compatibility with existing stack
+
+### Abstraction Level
+- Behavioral/contractual, not implementation details
+- No pseudocode or type definitions sneaking in
+- High-level architecture is fine, micro-details are not
+
+### Pattern Compatibility
+- Doesn't contradict CLAUDE.md guidance
+- Respects existing rules in .claude/rules/
+- Fits with codebase conventions found in related files
+
+## Output
+
+If no issues found:
+```
+PASS
+```
+
+If issues exist, plaintext feedback:
+```
+Scope: [what strays from the feature]
+Edge case: [missing error/boundary handling]
+Architecture: [code smell or design issue]
+Library: [outdated or non-idiomatic usage]
+Detail level: [too technical for a spec]
+Conflict: [contradicts existing pattern in X file]
+...
+```
+
+No stats, no headers, just the issues.

@@ -31,6 +31,7 @@ Parse the input to extract:
    - No deferred decisions ("investigate later", "TBD")
    - No conditional branches ("if X, then Y")
    - No unexplored complexity ("this may be tricky")
+   - No irrelevant information
 
 ## Output
 

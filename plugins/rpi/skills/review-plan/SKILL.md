@@ -34,23 +34,16 @@ Parse the input to extract:
 
 ## Output
 
-Report validation results:
-
+If all requirements are covered and no issues found:
 ```
-## Coverage Summary
-- Total requirements: N
-- Fully covered: N
-- Partially covered: N
-- Missing: N
-
-## Gaps Found
-[List specific gaps with spec line references]
-
-## Ambiguities
-[List unclear plan sections that need resolution]
-
-## Verdict
-PASS | FAIL
+PASS
 ```
 
-If FAIL, the plan needs revision before implementation.
+If issues exist, provide plaintext feedback:
+```
+Missing: [requirement from spec not in plan]
+Ambiguous: [unclear section that needs resolution]
+...
+```
+
+No stats, no headers, just the issues.

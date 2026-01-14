@@ -1,85 +1,34 @@
 ---
-description: Review changes, create logical commits, and push safely
-argument-hint: commit scope
-disable-model-invocation: true
-allowed-tools: Bash(git branch:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*)
+description: Stage and commit changes into logical commits
+argument-hint: [scope]
+allowed-tools: Bash(git:*)
 ---
 
-Review my changes and commit them safely.
+Stage and commit changes into logical commits.
 
-**Scope:** $ARGUMENTS
+**Scope:** $ARGUMENTS (empty = all changes)
 
-## Git State
-
-**Branches:**
-```
-!`git branch -a 2>/dev/null | head -20 || echo "Not a git repository"`
-```
+## Context
 
 **Status:**
 ```
-!`git status --short 2>/dev/null || echo "Not a git repository"`
-```
-
-**Staged changes:**
-```
-!`git diff --cached --stat 2>/dev/null`
-```
-
-**Unstaged changes:**
-```
-!`git diff --stat 2>/dev/null`
+!`git status --short 2>/dev/null`
 ```
 
 **Recent commits (style reference):**
 ```
-!`git log --oneline -8 2>/dev/null || echo "No commits yet"`
+!`git log --oneline -8 2>/dev/null`
 ```
 
-## Phase 1: Security & Quality Review
+## Process
 
-Before any commits, use a **haiku agent** to scan changed files for:
+1. **Stage** - If scope provided, stage matching files. Otherwise stage all changes.
+2. **Analyze** - Review staged diff for logical groupings
+3. **Commit** - Create commits. Small changes (<3 files, single concern) = single commit. Large changes = group into logical commits.
 
-### Blockers (must fix before commit)
-- **Secrets**: API keys, tokens, passwords, private keys, .env values
-- **Credentials**: AWS keys, database URLs with passwords, auth tokens
-- **Merge conflicts**: Unresolved `<<<<<<<`, `=======`, `>>>>>>>` markers
-- **Large binaries**: Files >1MB, node_modules, build artifacts
-
-### Warnings (remove unless intentional)
-- **Debug code**: `console.log`, `debugger`, `print()`, `var_dump`, `dd()`—unless codebase standard
-- **TODO/FIXME**: New ones being added (check diff, not existing code)
-- **Commented code**: Large blocks of commented-out code
-
-### Rules Check
-The agent should also check changed files against any applicable `.claude/rules/*.md` files. Only flag **clear violations**, not suggestions.
-
-**Agent output**: `BLOCK: <reason>` or `PASS`
-
-If BLOCK: Stop and report. User may instruct you to fix, but do not proceed until user responds.
-If PASS: Continue to Phase 2.
-
-## Phase 2: Prep
-
-1. Update `.gitignore` if needed (node_modules, build dirs, .env, etc.)
-2. Stage appropriate files
-
-## Phase 3: Commit Strategy
-
-**Small changes** (<3 files, single concern): Single commit
-**Large changes** (3+ files, multiple concerns): Group into logical commits
-
-Commit message format: `type(scope): subject`
-- Match style from recent commits above
+**Format:** `type(scope): subject`
+- Match style from recent commits
 - Types: feat, fix, docs, style, refactor, test, chore
-
-## Phase 4: Push
-
-**Branch check:**
-- If on `main`/`master` AND other branches exist: Warn before pushing, suggest creating a branch
-- If only branch or on feature branch: Push normally
-
-`git push origin <branch>`
 
 ## Output
 

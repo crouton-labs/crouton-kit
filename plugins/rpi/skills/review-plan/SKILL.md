@@ -8,7 +8,7 @@ agent: general-purpose
 
 # Review Plan Against Spec
 
-**Input:** `$ARGUMENTS` (spec path and plan path)
+**Input:** `$ARGUMENTS`
 
 Parse the input to extract:
 - Spec file path (`.claude/specs/*.spec.md`)
@@ -46,5 +46,3 @@ Missing: [requirement from spec not in plan]
 Ambiguous: [unclear section that needs resolution]
 ...
 ```
-
-No stats, no headers, just the issues.

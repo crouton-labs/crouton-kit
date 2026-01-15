@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# new-worktree - Create a sibling git worktree with dotfiles
+# new-worktree - Create a sibling git worktree with untracked files
 #
 # Usage: new-worktree <type> <topic>
 #        new-worktree <type> <VAL-xxx-topic>  (with Linear issue)
 #
 # Creates: ../<username>/<type>/<topic> worktree from current branch
-# Copies:  All dotfiles from source directory
+# Copies:  All dotfiles and gitignored files (node_modules, etc.)
 # Username: from git user.name (first name, lowercase)
 
 set -euo pipefail
@@ -115,9 +115,11 @@ mkdir -p "$(dirname "$WORKTREE_PATH")"
 # Create the worktree with new branch
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" HEAD
 
-# Copy dotfiles
-echo "Copying dotfiles..."
+# Copy dotfiles and gitignored files
+echo "Copying untracked files..."
 shopt -s dotglob nullglob
+
+# Copy dotfiles (except git internals)
 for item in "$REPO_ROOT"/.*; do
     name="$(basename "$item")"
     case "$name" in
@@ -133,6 +135,24 @@ for item in "$REPO_ROOT"/.*; do
         echo "  Copied: $name/"
     fi
 done
+
+# Copy gitignored files/directories (node_modules, build outputs, etc.)
+for item in "$REPO_ROOT"/*; do
+    name="$(basename "$item")"
+    # Skip if already exists in worktree (git-tracked)
+    [[ -e "$WORKTREE_PATH/$name" ]] && continue
+    # Check if gitignored
+    if git -C "$REPO_ROOT" check-ignore -q "$item" 2>/dev/null; then
+        if [[ -f "$item" ]]; then
+            cp "$item" "$WORKTREE_PATH/"
+            echo "  Copied: $name"
+        elif [[ -d "$item" ]]; then
+            cp -r "$item" "$WORKTREE_PATH/"
+            echo "  Copied: $name/"
+        fi
+    fi
+done
+
 shopt -u dotglob nullglob
 
 # Link to Linear issue if present

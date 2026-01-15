@@ -40,7 +40,7 @@
       "name": "dev-utilities",
       "source": "./plugins/dev-utilities",
       "description": "Developer utilities (notifications, command creation)",
-      "version": "1.0.11",
+      "version": "1.0.12",
       "keywords": ["utilities", "notifications"]
     },
     {

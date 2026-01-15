@@ -33,7 +33,7 @@ def main():
 
     message = """PR merged successfully. Complete the cleanup:
 
-1. Switch to the target branch: `git checkout main` (or the merge target)
+1. Switch to the target branch: `git checkout dev` (or the merge target)
 2. Pull latest changes: `git pull`
 3. Delete the merged branch locally: `git branch -d <branch-name>`
 4. Prune remote tracking branches: `git fetch --prune`

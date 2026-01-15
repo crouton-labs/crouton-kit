@@ -97,13 +97,11 @@ def main():
     if not messages:
         sys.exit(0)
 
-    combined = "<system-reminder>\n" + "\n\n".join(messages) + "\n</system-reminder>"
+    combined = "\n\n".join(messages)
 
     output = {
-        "hookSpecificOutput": {
-            "hookEventName": "Stop",
-            "additionalContext": combined
-        }
+        "continue": True,
+        "systemMessage": combined
     }
     print(json.dumps(output))
     sys.exit(0)

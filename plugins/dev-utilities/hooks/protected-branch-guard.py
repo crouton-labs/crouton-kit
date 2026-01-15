@@ -185,25 +185,25 @@ def main():
         config_exists = True  # File exists but invalid
 
     if not config_exists:
-        error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
+        error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}' in {repo_root}
 
 No Linear config found. Ask user: "Do you want to enable Linear tracking for this project?"
 
 **If yes:**
 1. Run `linear team list` to find the team key (e.g., VAL, ENG)
-2. Create `.claude/linear-config.json`:
+2. Create `{repo_root}/.claude/linear-config.json`:
 ```json
 {{"track": true, "teamKey": "<from team list>"}}
 ```
 3. Then use the `linear-worktree` skill to find/create an issue.
 
-**If no:** Create `.claude/linear-config.json`:
+**If no:** Create `{repo_root}/.claude/linear-config.json`:
 ```json
 {{"track": false}}
 ```
 Then run `new-worktree <type> <topic>` + cd"""
     elif linear_enabled:
-        error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
+        error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}' in {repo_root}
 
 Use the `linear-worktree` skill to find an existing Linear issue.
 
@@ -211,7 +211,7 @@ The skill returns:
 - `USE: <type> VAL-xxx-slug` → run `new-worktree <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
 - `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then run new-worktree + cd"""
     else:
-        error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
+        error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}' in {repo_root}
 
 Create a worktree and cd into it:
   new-worktree <type> <topic>

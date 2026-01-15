@@ -12,7 +12,7 @@
       "name": "devcore",
       "source": "./plugins/devcore",
       "description": "Core development agents and code quality hooks",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "keywords": ["agents", "code-review", "quality"]
     },
     {
@@ -40,14 +40,14 @@
       "name": "dev-utilities",
       "source": "./plugins/dev-utilities",
       "description": "Developer utilities (notifications, command creation)",
-      "version": "1.0.1",
+      "version": "1.0.5",
       "keywords": ["utilities", "notifications"]
     },
     {
       "name": "rpi",
       "source": "./plugins/rpi",
       "description": "Feature development workflow: arch → plan → implement → review → fix",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "keywords": ["workflow", "development", "planning"]
     },
     {

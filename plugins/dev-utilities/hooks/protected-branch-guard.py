@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
 PreToolUse hook that blocks file writes on protected branches.
-Protected branches: main, master, dev, development, test, staging, production
+Checks GitHub API for branch protection rules.
 
-Only blocks writes to files within the git repository.
+Allows writes to:
+- Files outside the git repository
+- Gitignored files
+- Files in the .claude/ directory
 """
 import json
 import re
@@ -98,6 +101,16 @@ def file_is_in_repo(file_path: str, repo_root: str) -> bool:
         return False
 
 
+def is_gitignored(file_path: str) -> bool:
+    """Check if a file is gitignored."""
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", file_path],
+        capture_output=True,
+        timeout=5,
+    )
+    return result.returncode == 0
+
+
 def main():
     input_data = json.load(sys.stdin)
     tool_name = input_data.get("tool_name", "")
@@ -119,6 +132,10 @@ def main():
     
     # Allow writes outside the repo
     if not file_is_in_repo(file_path, repo_root):
+        sys.exit(0)
+
+    # Allow writes to gitignored files
+    if is_gitignored(file_path):
         sys.exit(0)
 
     # Allow writes to .claude/ directory (config files, not code)

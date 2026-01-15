@@ -2,6 +2,7 @@
 """
 PostToolUse hook that prompts to create PR after pushing from a feature branch.
 Extracts Linear issue ID from branch name and suggests proper linking.
+Only prompts if no PR exists for the branch yet.
 """
 import json
 import re
@@ -47,6 +48,17 @@ def is_feature_branch(branch: str) -> bool:
     return branch not in PROTECTED_BRANCHES
 
 
+def pr_exists_for_branch(branch: str) -> bool:
+    """Check if a PR already exists for the current branch."""
+    result = subprocess.run(
+        ["gh", "pr", "view", branch, "--json", "state"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.returncode == 0
+
+
 def main():
     input_data = json.load(sys.stdin)
 
@@ -67,6 +79,9 @@ def main():
         sys.exit(0)
 
     if not is_feature_branch(branch):
+        sys.exit(0)
+
+    if pr_exists_for_branch(branch):
         sys.exit(0)
 
     base_branch = get_default_base_branch()

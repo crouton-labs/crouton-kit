@@ -115,9 +115,12 @@ mkdir -p "$(dirname "$WORKTREE_PATH")"
 # Create the worktree with new branch
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" HEAD
 
-# Copy dotfiles and gitignored files
-echo "Copying untracked files..."
+# Copy dotfiles and symlink gitignored directories
+echo "Linking untracked files..."
 shopt -s dotglob nullglob
+
+# Directories to always symlink (large, shared safely)
+SYMLINK_DIRS="node_modules|dist|build|coverage|.next|.nuxt|.output|__pycache__|.pytest_cache|target|vendor"
 
 # Copy dotfiles (except git internals)
 for item in "$REPO_ROOT"/.*; do
@@ -131,12 +134,18 @@ for item in "$REPO_ROOT"/.*; do
         cp "$item" "$WORKTREE_PATH/"
         echo "  Copied: $name"
     elif [[ -d "$item" ]]; then
-        cp -r "$item" "$WORKTREE_PATH/"
-        echo "  Copied: $name/"
+        # Symlink large dotdirs, copy small ones
+        if [[ "$name" =~ ^\.beads$ ]]; then
+            ln -s "$item" "$WORKTREE_PATH/$name"
+            echo "  Linked: $name/ → $item"
+        else
+            cp -r "$item" "$WORKTREE_PATH/"
+            echo "  Copied: $name/"
+        fi
     fi
 done
 
-# Copy gitignored files/directories (node_modules, build outputs, etc.)
+# Symlink gitignored directories, copy gitignored files
 for item in "$REPO_ROOT"/*; do
     name="$(basename "$item")"
     # Skip if already exists in worktree (git-tracked)
@@ -147,8 +156,14 @@ for item in "$REPO_ROOT"/*; do
             cp "$item" "$WORKTREE_PATH/"
             echo "  Copied: $name"
         elif [[ -d "$item" ]]; then
-            cp -r "$item" "$WORKTREE_PATH/"
-            echo "  Copied: $name/"
+            # Symlink large dirs, copy small ones
+            if [[ "$name" =~ ^($SYMLINK_DIRS)$ ]]; then
+                ln -s "$item" "$WORKTREE_PATH/$name"
+                echo "  Linked: $name/ → $item"
+            else
+                cp -r "$item" "$WORKTREE_PATH/"
+                echo "  Copied: $name/"
+            fi
         fi
     fi
 done

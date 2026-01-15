@@ -18,10 +18,20 @@ from pathlib import Path
 _protection_cache: dict[str, bool] = {}
 
 
-def get_repo_root() -> str | None:
-    """Get the git repository root. Returns None if not in a git repo."""
+def get_repo_root_for_path(file_path: str) -> str | None:
+    """Get the git repository root for a given file path. Returns None if not in a git repo."""
+    # Get the directory containing the file
+    file_dir = str(Path(file_path).resolve().parent)
+
+    # If directory doesn't exist yet, walk up to find existing parent
+    while not Path(file_dir).exists() and file_dir != "/":
+        file_dir = str(Path(file_dir).parent)
+
+    if not Path(file_dir).exists():
+        return None
+
     result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+        ["git", "-C", file_dir, "rev-parse", "--show-toplevel"],
         capture_output=True,
         text=True,
         timeout=5,
@@ -31,10 +41,10 @@ def get_repo_root() -> str | None:
     return result.stdout.strip()
 
 
-def get_current_branch() -> str:
-    """Get the current git branch name. Raises if not in a git repo."""
+def get_branch_for_repo(repo_root: str) -> str:
+    """Get the current git branch name for a given repo. Raises if not in a git repo."""
     result = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        ["git", "-C", repo_root, "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True,
         text=True,
         timeout=5,
@@ -44,34 +54,35 @@ def get_current_branch() -> str:
     return result.stdout.strip()
 
 
-def is_protected_branch(branch: str) -> bool:
+def is_protected_branch(branch: str, repo_root: str) -> bool:
     """Check if branch has protection rules on remote via GitHub API."""
-    if branch in _protection_cache:
-        return _protection_cache[branch]
-    
+    cache_key = f"{repo_root}:{branch}"
+    if cache_key in _protection_cache:
+        return _protection_cache[cache_key]
+
     # Try to get repo info from git remote
     try:
         result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
+            ["git", "-C", repo_root, "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if result.returncode != 0:
-            _protection_cache[branch] = False
+            _protection_cache[cache_key] = False
             return False
-        
+
         remote_url = result.stdout.strip()
-        
+
         # Parse owner/repo from remote URL
         # Handles: git@github.com:owner/repo.git, https://github.com/owner/repo.git
         match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
         if not match:
-            _protection_cache[branch] = False
+            _protection_cache[cache_key] = False
             return False
-        
+
         owner, repo = match.groups()
-        
+
         # Check branch protection via gh CLI
         result = subprocess.run(
             ["gh", "api", f"repos/{owner}/{repo}/branches/{branch}/protection", "--silent"],
@@ -79,15 +90,15 @@ def is_protected_branch(branch: str) -> bool:
             text=True,
             timeout=10,
         )
-        
+
         # 200 = protected, 404 = not protected, other = assume not protected
         is_protected = result.returncode == 0
-        _protection_cache[branch] = is_protected
+        _protection_cache[cache_key] = is_protected
         return is_protected
-        
+
     except (subprocess.TimeoutExpired, FileNotFoundError):
         # gh not installed or timeout - assume not protected
-        _protection_cache[branch] = False
+        _protection_cache[cache_key] = False
         return False
 
 
@@ -101,10 +112,10 @@ def file_is_in_repo(file_path: str, repo_root: str) -> bool:
         return False
 
 
-def is_gitignored(file_path: str) -> bool:
+def is_gitignored(file_path: str, repo_root: str) -> bool:
     """Check if a file is gitignored."""
     result = subprocess.run(
-        ["git", "check-ignore", "-q", file_path],
+        ["git", "-C", repo_root, "check-ignore", "-q", file_path],
         capture_output=True,
         timeout=5,
     )
@@ -119,23 +130,24 @@ def main():
     if tool_name not in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
         sys.exit(0)
 
-    repo_root = get_repo_root()
-    if not repo_root:
-        sys.exit(0)  # Not in a git repo - nothing to protect
-
     # Get file path from tool input
     tool_input = input_data.get("tool_input", {})
     file_path = tool_input.get("file_path", "")
-    
+
     if not file_path:
         sys.exit(0)  # No file path - can't check
-    
+
+    # Get the repo root for the FILE being written (not current working directory)
+    repo_root = get_repo_root_for_path(file_path)
+    if not repo_root:
+        sys.exit(0)  # File not in a git repo - nothing to protect
+
     # Allow writes outside the repo
     if not file_is_in_repo(file_path, repo_root):
         sys.exit(0)
 
     # Allow writes to gitignored files
-    if is_gitignored(file_path):
+    if is_gitignored(file_path, repo_root):
         sys.exit(0)
 
     # Allow writes to .claude/ directory (config files, not code)
@@ -148,12 +160,13 @@ def main():
     except (ValueError, IndexError):
         pass  # Not relative to repo or empty path - continue with checks
 
+    # Get the branch for the FILE's repository (not current working directory)
     try:
-        branch = get_current_branch()
+        branch = get_branch_for_repo(repo_root)
     except RuntimeError:
         sys.exit(0)  # Not in a git repo - nothing to protect
 
-    if not is_protected_branch(branch):
+    if not is_protected_branch(branch, repo_root):
         sys.exit(0)
 
     # Check for linear config

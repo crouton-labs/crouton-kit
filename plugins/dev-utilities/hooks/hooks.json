@@ -45,6 +45,14 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-md-manager.bundle.mjs"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/setup-path.sh"
+          }
+        ]
       }
     ],
     "SessionEnd": [

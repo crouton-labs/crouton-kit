@@ -201,20 +201,20 @@ No Linear config found. Ask user: "Do you want to enable Linear tracking for thi
 ```json
 {{"track": false}}
 ```
-Then run `{repo_root}/bin/new-worktree <type> <topic>` + cd"""
+Then run `new-worktree <type> <topic>` + cd"""
     elif linear_enabled:
         error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
 
 Use the `linear-worktree` skill to find an existing Linear issue.
 
 The skill returns:
-- `USE: <type> VAL-xxx-slug` → run `{repo_root}/bin/new-worktree <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
-- `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then run {repo_root}/bin/new-worktree + cd"""
+- `USE: <type> VAL-xxx-slug` → run `new-worktree <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
+- `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then run new-worktree + cd"""
     else:
         error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
 
 Create a worktree and cd into it:
-  {repo_root}/bin/new-worktree <type> <topic>
+  new-worktree <type> <topic>
   cd <WORKTREE_PATH from output>
 
 Types: feat, fix, refactor, chore, docs"""

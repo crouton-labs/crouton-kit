@@ -88,21 +88,6 @@ def is_protected_branch(branch: str) -> bool:
         return False
 
 
-def get_username() -> str:
-    """Get username from git config (first name, lowercase)."""
-    result = subprocess.run(
-        ["git", "config", "user.name"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        # Take first name, lowercase, replace spaces with hyphens
-        name = result.stdout.strip().split()[0].lower()
-        return name
-    return "<username>"
-
-
 def file_is_in_repo(file_path: str, repo_root: str) -> bool:
     """Check if a file path is within the git repository."""
     try:
@@ -155,7 +140,6 @@ def main():
         sys.exit(0)
 
     # Check for linear config
-    username = get_username()
     config_path = f"{repo_root}/.claude/linear-config.json"
     config_exists = False
     linear_enabled = False
@@ -179,7 +163,7 @@ No Linear config found. Ask user: "Do you want to enable Linear tracking for thi
 1. Run `linear team list` to find the team key (e.g., VAL, ENG)
 2. Create `.claude/linear-config.json`:
 ```json
-{{"track": true, "username": "{username}", "teamKey": "<from team list>"}}
+{{"track": true, "teamKey": "<from team list>"}}
 ```
 3. Then use the `linear-worktree` skill to find/create an issue.
 

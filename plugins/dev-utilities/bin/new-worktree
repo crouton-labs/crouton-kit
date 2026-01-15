@@ -7,7 +7,7 @@
 #
 # Creates: ../<username>/<type>/<topic> worktree from current branch
 # Copies:  All dotfiles from source directory
-# Username: from .claude/linear-config.json or git user.name
+# Username: from git user.name (first name, lowercase)
 
 set -euo pipefail
 
@@ -34,7 +34,7 @@ Examples:
 Creates worktree at: ../<username>/<type>/<topic>
 Branch name: <username>/<type>/<topic>
 
-Username from .claude/linear-config.json or git user.name.
+Username from git user.name (first name, lowercase).
 EOF
     exit 1
 }
@@ -64,20 +64,16 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 # Get config
 CONFIG_FILE="$REPO_ROOT/.claude/linear-config.json"
 LINEAR_ENABLED=false
-USERNAME=""
 
 if [[ -f "$CONFIG_FILE" ]]; then
-    USERNAME=$(grep -o '"username"[^,}]*' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4 || true)
     TRACK=$(grep -o '"track"[^,}]*' "$CONFIG_FILE" 2>/dev/null | grep -o 'true\|false' || echo "false")
     [[ "$TRACK" == "true" ]] && LINEAR_ENABLED=true
 fi
 
-# Fall back to git user.name if no username in config
+# Get username from git (first name, lowercase)
+USERNAME=$(git config user.name 2>/dev/null | awk '{print tolower($1)}' || true)
 if [[ -z "${USERNAME:-}" ]]; then
-    USERNAME=$(git config user.name 2>/dev/null | awk '{print tolower($1)}' || true)
-fi
-if [[ -z "${USERNAME:-}" ]]; then
-    die "No username found. Set .claude/linear-config.json or git user.name"
+    die "No git user.name configured. Run: git config user.name 'Your Name'"
 fi
 
 # Check if topic includes a Linear issue ID

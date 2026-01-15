@@ -6,11 +6,13 @@ Protected branches: main, master, dev, development, test, staging, production
 Only blocks writes to files within the git repository.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
-PROTECTED_BRANCHES = {"main", "master", "dev", "development", "test", "staging", "production"}
+# Cache for branch protection status (persists for hook lifetime, which is per-invocation)
+_protection_cache: dict[str, bool] = {}
 
 
 def get_repo_root() -> str | None:
@@ -40,8 +42,50 @@ def get_current_branch() -> str:
 
 
 def is_protected_branch(branch: str) -> bool:
-    """Check if branch is in the protected set."""
-    return branch in PROTECTED_BRANCHES
+    """Check if branch has protection rules on remote via GitHub API."""
+    if branch in _protection_cache:
+        return _protection_cache[branch]
+    
+    # Try to get repo info from git remote
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            _protection_cache[branch] = False
+            return False
+        
+        remote_url = result.stdout.strip()
+        
+        # Parse owner/repo from remote URL
+        # Handles: git@github.com:owner/repo.git, https://github.com/owner/repo.git
+        match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
+        if not match:
+            _protection_cache[branch] = False
+            return False
+        
+        owner, repo = match.groups()
+        
+        # Check branch protection via gh CLI
+        result = subprocess.run(
+            ["gh", "api", f"repos/{owner}/{repo}/branches/{branch}/protection", "--silent"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        
+        # 200 = protected, 404 = not protected, other = assume not protected
+        is_protected = result.returncode == 0
+        _protection_cache[branch] = is_protected
+        return is_protected
+        
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        # gh not installed or timeout - assume not protected
+        _protection_cache[branch] = False
+        return False
 
 
 def get_username() -> str:
@@ -137,26 +181,26 @@ No Linear config found. Ask user: "Do you want to enable Linear tracking for thi
 ```json
 {{"track": true, "username": "{username}", "teamKey": "<from team list>"}}
 ```
-3. Then use `/linear-worktree` to find/create an issue.
+3. Then use the `linear-worktree` skill to find/create an issue.
 
 **If no:** Create `.claude/linear-config.json`:
 ```json
 {{"track": false}}
 ```
-Then run `new-worktree <type> <topic>` + cd"""
+Then run `${CLAUDE_PLUGIN_ROOT}/bin/new-worktree <type> <topic>` + cd"""
     elif linear_enabled:
         error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
 
-Use /linear-worktree to find an existing Linear issue.
+Use the `linear-worktree` skill to find an existing Linear issue.
 
 The skill returns:
-- `USE: <type> VAL-xxx-slug` → run `new-worktree <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
-- `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then new-worktree + cd"""
+- `USE: <type> VAL-xxx-slug` → run `${CLAUDE_PLUGIN_ROOT}/bin/new-worktree <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
+- `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then run ${CLAUDE_PLUGIN_ROOT}/bin/new-worktree + cd"""
     else:
         error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}'
 
 Create a worktree and cd into it:
-  new-worktree <type> <topic>
+  ${CLAUDE_PLUGIN_ROOT}/bin/new-worktree <type> <topic>
   cd <WORKTREE_PATH from output>
 
 Types: feat, fix, refactor, chore, docs"""

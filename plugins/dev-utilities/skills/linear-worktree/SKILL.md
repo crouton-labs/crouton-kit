@@ -50,6 +50,6 @@ LINEAR_UNAVAILABLE
 
 ## For Main Agent
 
-- `USE: <type> <ISSUE-ID-slug>` → `new-worktree <type> <ISSUE-ID-slug>`
-- `NEW_ISSUE_NEEDED` → Ask user, create issue with `linear issue create -t "Title" -a self --start`, then `new-worktree`
-- `LINEAR_UNAVAILABLE` → `new-worktree <type> <topic>`
+- `USE: <type> <ISSUE-ID-slug>` → `${CLAUDE_PLUGIN_ROOT}/bin/new-worktree <type> <ISSUE-ID-slug>`
+- `NEW_ISSUE_NEEDED` → Ask user, create issue with `linear issue create -t "Title" -a self --start`, then `${CLAUDE_PLUGIN_ROOT}/bin/new-worktree`
+- `LINEAR_UNAVAILABLE` → `${CLAUDE_PLUGIN_ROOT}/bin/new-worktree <type> <topic>`

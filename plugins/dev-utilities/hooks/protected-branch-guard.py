@@ -2,6 +2,8 @@
 """
 PreToolUse hook that blocks file writes on protected branches.
 Protected branches: main, master, dev, development, test, staging, production
+
+Only blocks writes to files within the git repository.
 """
 import json
 import subprocess
@@ -9,6 +11,19 @@ import sys
 from pathlib import Path
 
 PROTECTED_BRANCHES = {"main", "master", "dev", "development", "test", "staging", "production"}
+
+
+def get_repo_root() -> str | None:
+    """Get the git repository root. Returns None if not in a git repo."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
 
 
 def get_current_branch() -> str:
@@ -44,12 +59,37 @@ def get_username() -> str:
     return "<username>"
 
 
+def file_is_in_repo(file_path: str, repo_root: str) -> bool:
+    """Check if a file path is within the git repository."""
+    try:
+        file_resolved = Path(file_path).resolve()
+        repo_resolved = Path(repo_root).resolve()
+        return str(file_resolved).startswith(str(repo_resolved) + "/") or file_resolved == repo_resolved
+    except Exception:
+        return False
+
+
 def main():
     input_data = json.load(sys.stdin)
     tool_name = input_data.get("tool_name", "")
 
     # Only check file modification tools
     if tool_name not in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        sys.exit(0)
+
+    repo_root = get_repo_root()
+    if not repo_root:
+        sys.exit(0)  # Not in a git repo - nothing to protect
+
+    # Get file path from tool input
+    tool_input = input_data.get("tool_input", {})
+    file_path = tool_input.get("file_path", "")
+    
+    if not file_path:
+        sys.exit(0)  # No file path - can't check
+    
+    # Allow writes outside the repo
+    if not file_is_in_repo(file_path, repo_root):
         sys.exit(0)
 
     try:
@@ -62,11 +102,6 @@ def main():
 
     # Check for linear config
     username = get_username()
-    repo_root = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True, text=True, timeout=5
-    ).stdout.strip()
-
     config_path = f"{repo_root}/.claude/linear-config.json"
     config_exists = False
     linear_enabled = False

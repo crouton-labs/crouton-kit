@@ -92,6 +92,16 @@ def main():
     if not file_is_in_repo(file_path, repo_root):
         sys.exit(0)
 
+    # Allow writes to .claude/ directory (config files, not code)
+    try:
+        file_resolved = Path(file_path).resolve()
+        repo_resolved = Path(repo_root).resolve()
+        relative = file_resolved.relative_to(repo_resolved)
+        if relative.parts and relative.parts[0] == ".claude":
+            sys.exit(0)
+    except (ValueError, IndexError):
+        pass  # Not relative to repo or empty path - continue with checks
+
     try:
         branch = get_current_branch()
     except RuntimeError:

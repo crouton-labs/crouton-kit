@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+#
+# new-worktree - Create a sibling git worktree with dotfiles
+#
+# Usage: new-worktree <type> <topic>
+#        new-worktree <type> <VAL-xxx-topic>  (with Linear issue)
+#
+# Creates: ../<username>/<type>/<topic> worktree from current branch
+# Copies:  All dotfiles from source directory
+# Username: from .claude/linear-config.json or git user.name
+
+set -euo pipefail
+
+VALID_TYPES=("feat" "fix" "refactor" "chore" "docs")
+
+die() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+usage() {
+    cat <<EOF
+Usage: new-worktree <type> <topic>
+
+Types: feat, fix, refactor, chore, docs
+Topic: short descriptive name (kebab-case)
+       Can include Linear issue: VAL-123-description
+
+Examples:
+  new-worktree feat user-auth
+  new-worktree fix VAL-50-login-bug
+  new-worktree refactor api-cleanup
+
+Creates worktree at: ../<username>/<type>/<topic>
+Branch name: <username>/<type>/<topic>
+
+Username from .claude/linear-config.json or git user.name.
+EOF
+    exit 1
+}
+
+# Validate args
+[[ $# -ne 2 ]] && usage
+
+TYPE="$1"
+TOPIC="$2"
+
+# Validate type
+type_valid=false
+for t in "${VALID_TYPES[@]}"; do
+    [[ "$TYPE" == "$t" ]] && type_valid=true && break
+done
+$type_valid || die "Invalid type '$TYPE'. Must be one of: ${VALID_TYPES[*]}"
+
+# Validate topic (alphanumeric, hyphens, underscores)
+[[ "$TOPIC" =~ ^[a-zA-Z0-9_-]+$ ]] || die "Topic must be alphanumeric with hyphens/underscores only"
+
+# Must be in a git repo
+git rev-parse --git-dir > /dev/null 2>&1 || die "Not in a git repository"
+
+# Get repo root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Get config
+CONFIG_FILE="$REPO_ROOT/.claude/linear-config.json"
+LINEAR_ENABLED=false
+USERNAME=""
+
+if [[ -f "$CONFIG_FILE" ]]; then
+    USERNAME=$(grep -o '"username"[^,}]*' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4 || true)
+    TRACK=$(grep -o '"track"[^,}]*' "$CONFIG_FILE" 2>/dev/null | grep -o 'true\|false' || echo "false")
+    [[ "$TRACK" == "true" ]] && LINEAR_ENABLED=true
+fi
+
+# Fall back to git user.name if no username in config
+if [[ -z "${USERNAME:-}" ]]; then
+    USERNAME=$(git config user.name 2>/dev/null | awk '{print tolower($1)}' || true)
+fi
+if [[ -z "${USERNAME:-}" ]]; then
+    die "No username found. Set .claude/linear-config.json or git user.name"
+fi
+
+# Check if topic includes a Linear issue ID
+HAS_LINEAR_ID=false
+LINEAR_ID=""
+if [[ "$TOPIC" =~ ^([A-Z]+-[0-9]+) ]]; then
+    HAS_LINEAR_ID=true
+    LINEAR_ID="${BASH_REMATCH[1]}"
+fi
+
+BRANCH_NAME="${USERNAME}/${TYPE}/${TOPIC}"
+WORKTREE_PATH="$(dirname "$REPO_ROOT")/${USERNAME}/${TYPE}/${TOPIC}"
+
+# Check if worktree already exists
+if [[ -d "$WORKTREE_PATH" ]]; then
+    die "Worktree already exists at: $WORKTREE_PATH"
+fi
+
+# Check if branch already exists
+if git show-ref --verify --quiet "refs/heads/${BRANCH_NAME}"; then
+    die "Branch '${BRANCH_NAME}' already exists"
+fi
+
+# Get current branch as base
+BASE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+echo "Creating worktree..."
+echo "  From: $REPO_ROOT (branch: $BASE_BRANCH)"
+echo "  To:   $WORKTREE_PATH"
+echo "  Branch: $BRANCH_NAME"
+if $HAS_LINEAR_ID; then
+    echo "  Linear: ${TOPIC%%-*}"
+fi
+echo
+
+# Create parent directories
+mkdir -p "$(dirname "$WORKTREE_PATH")"
+
+# Create the worktree with new branch
+git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" HEAD
+
+# Copy dotfiles
+echo "Copying dotfiles..."
+shopt -s dotglob nullglob
+for item in "$REPO_ROOT"/.*; do
+    name="$(basename "$item")"
+    case "$name" in
+        .|..|.git|.gitignore|.gitmodules|.gitattributes)
+            continue
+            ;;
+    esac
+    if [[ -f "$item" ]]; then
+        cp "$item" "$WORKTREE_PATH/"
+        echo "  Copied: $name"
+    elif [[ -d "$item" ]]; then
+        cp -r "$item" "$WORKTREE_PATH/"
+        echo "  Copied: $name/"
+    fi
+done
+shopt -u dotglob nullglob
+
+# Link to Linear issue if present
+if $HAS_LINEAR_ID && command -v linear &> /dev/null; then
+    echo "Linking to Linear..."
+    if linear issue update "$LINEAR_ID" -s "In Progress" 2>/dev/null; then
+        echo "  ✓ $LINEAR_ID marked In Progress"
+    fi
+fi
+
+echo
+echo "✓ Worktree created"
+echo "WORKTREE_PATH=$WORKTREE_PATH"
+if $HAS_LINEAR_ID; then
+    echo "LINEAR_ISSUE=$LINEAR_ID"
+fi
+echo ""
+echo "Run: cd \"$WORKTREE_PATH\""

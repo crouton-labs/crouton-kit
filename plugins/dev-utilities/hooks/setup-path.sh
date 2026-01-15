@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
 #
-# SessionStart hook that ensures crouton-kit/bin is in user's PATH.
-# Adds to shell config if not already present.
+# SessionStart hook that ensures new-worktree is globally accessible.
+# Creates symlink in ~/.local/bin and adds to PATH if needed.
 #
 
 set -euo pipefail
 
-# Get plugin root (where this hook lives)
+# Get plugin root
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$(dirname "$(realpath "$0")")")}"
-BIN_DIR="$PLUGIN_ROOT/bin"
+NEW_WORKTREE="$PLUGIN_ROOT/bin/new-worktree"
+LOCAL_BIN="$HOME/.local/bin"
 
 # Check if new-worktree is already accessible
 if command -v new-worktree &>/dev/null; then
     exit 0
 fi
 
-# Check if already in shell config
+# Create ~/.local/bin if it doesn't exist
+mkdir -p "$LOCAL_BIN"
+
+# Create/update symlink
+ln -sf "$NEW_WORKTREE" "$LOCAL_BIN/new-worktree"
+
+# Check if ~/.local/bin is in PATH via shell config
 SHELL_CONFIG=""
 if [[ -f "$HOME/.zshrc" ]]; then
     SHELL_CONFIG="$HOME/.zshrc"
@@ -25,21 +32,13 @@ elif [[ -f "$HOME/.bash_profile" ]]; then
     SHELL_CONFIG="$HOME/.bash_profile"
 fi
 
-if [[ -z "$SHELL_CONFIG" ]]; then
-    exit 0  # No shell config found, skip
+# Add to PATH if not already there
+if [[ -n "$SHELL_CONFIG" ]] && ! grep -q '\.local/bin' "$SHELL_CONFIG" 2>/dev/null; then
+    {
+        echo ""
+        echo "# Local bin (added automatically)"
+        echo 'export PATH="$HOME/.local/bin:$PATH"'
+    } >> "$SHELL_CONFIG"
 fi
 
-# Check if path already in config
-if grep -q "$BIN_DIR" "$SHELL_CONFIG" 2>/dev/null; then
-    exit 0  # Already configured
-fi
-
-# Add to shell config
-{
-    echo ""
-    echo "# crouton-kit CLI tools (added automatically)"
-    echo "export PATH=\"\$PATH:$BIN_DIR\""
-} >> "$SHELL_CONFIG"
-
-# Output message for user
-echo "{\"systemMessage\": \"Added crouton-kit/bin to PATH in $SHELL_CONFIG. Restart your shell or run: source $SHELL_CONFIG\"}"
+echo "{\"systemMessage\": \"Installed new-worktree to ~/.local/bin. Restart shell or run: export PATH=\\\"$LOCAL_BIN:\$PATH\\\"\"}"

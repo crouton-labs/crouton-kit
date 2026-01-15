@@ -9,6 +9,7 @@ Allows writes to:
 - Files in the .claude/ directory
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -16,6 +17,10 @@ from pathlib import Path
 
 # Cache for branch protection status (persists for hook lifetime, which is per-invocation)
 _protection_cache: dict[str, bool] = {}
+
+# Get the new-worktree script path from plugin root
+_plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or str(Path(__file__).parent.parent)
+NEW_WORKTREE = f"{_plugin_root}/bin/new-worktree"
 
 
 def get_repo_root_for_path(file_path: str) -> str | None:
@@ -123,7 +128,11 @@ def is_gitignored(file_path: str, repo_root: str) -> bool:
 
 
 def main():
-    input_data = json.load(sys.stdin)
+    try:
+        input_data = json.load(sys.stdin)
+    except (json.JSONDecodeError, Exception):
+        sys.exit(0)  # Invalid input - allow operation
+
     tool_name = input_data.get("tool_name", "")
 
     # Only check file modification tools
@@ -201,20 +210,20 @@ No Linear config found. Ask user: "Do you want to enable Linear tracking for thi
 ```json
 {{"track": false}}
 ```
-Then run `new-worktree <type> <topic>` + cd"""
+Then run `{NEW_WORKTREE} <type> <topic>` + cd"""
     elif linear_enabled:
         error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}' in {repo_root}
 
 Use the `linear-worktree` skill to find an existing Linear issue.
 
 The skill returns:
-- `USE: <type> VAL-xxx-slug` → run `new-worktree <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
-- `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then run new-worktree + cd"""
+- `USE: <type> VAL-xxx-slug` → run `{NEW_WORKTREE} <type> VAL-xxx-slug`, then `cd` to WORKTREE_PATH from output
+- `NEW_ISSUE_NEEDED` → ask user what they're working on, create issue with `linear issue create -t "Title" -a self --start`, then run {NEW_WORKTREE} + cd"""
     else:
         error_msg = f"""⛔ Blocked: Cannot write files on protected branch '{branch}' in {repo_root}
 
 Create a worktree and cd into it:
-  new-worktree <type> <topic>
+  {NEW_WORKTREE} <type> <topic>
   cd <WORKTREE_PATH from output>
 
 Types: feat, fix, refactor, chore, docs"""
@@ -224,4 +233,7 @@ Types: feat, fix, refactor, chore, docs"""
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        sys.exit(0)  # On any error, allow the operation

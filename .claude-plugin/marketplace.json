@@ -23,9 +23,9 @@
       "keywords": ["learning", "education", "interactive"]
     },
     {
-      "name": "git-workflow",
-      "source": "./plugins/git-workflow",
-      "description": "Git automation with logical commit creation",
+      "name": "git-smart",
+      "source": "./plugins/git-smart",
+      "description": "Smart git commits with security and quality review",
       "version": "1.0.0",
       "keywords": ["git", "commits", "workflow"]
     },
@@ -42,13 +42,6 @@
       "description": "Developer utilities (notifications, command creation)",
       "version": "1.0.0",
       "keywords": ["utilities", "notifications"]
-    },
-    {
-      "name": "debugging",
-      "source": "./plugins/debugging",
-      "description": "Systematic debugging and bug investigation workflows",
-      "version": "1.0.0",
-      "keywords": ["debug", "bugs", "investigation"]
     },
     {
       "name": "rpi",

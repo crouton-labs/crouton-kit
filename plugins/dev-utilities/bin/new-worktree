@@ -2,8 +2,12 @@
 #
 # new-worktree - Create a sibling git worktree with untracked files
 #
-# Usage: new-worktree <type> <topic>
+# Usage: new-worktree <type> <topic> [options]
 #        new-worktree <type> <VAL-xxx-topic>  (with Linear issue)
+#
+# Options:
+#   --extract <files...>  Extract specific changed files to worktree, reset in original
+#   --patch <file>        Apply patch to worktree, reverse-apply to original
 #
 # Creates: ../<username>/<type>/<topic> worktree from current branch
 # Copies:  All dotfiles and gitignored files (node_modules, etc.)
@@ -20,16 +24,21 @@ die() {
 
 usage() {
     cat <<EOF
-Usage: new-worktree <type> <topic>
+Usage: new-worktree <type> <topic> [options]
 
 Types: feat, fix, refactor, chore, docs
 Topic: short descriptive name (kebab-case)
        Can include Linear issue: VAL-123-description
 
+Options:
+  --extract <files...>  Extract changed files to worktree, reset in original
+  --patch <file>        Apply patch to worktree, reverse-apply to original
+
 Examples:
   new-worktree feat user-auth
   new-worktree fix VAL-50-login-bug
-  new-worktree refactor api-cleanup
+  new-worktree feat api-changes --extract src/api.ts src/routes.ts
+  new-worktree fix auth-bug --patch /tmp/auth-fix.patch
 
 Creates worktree at: ../<username>/<type>/<topic>
 Branch name: <username>/<type>/<topic>
@@ -39,7 +48,40 @@ EOF
     exit 1
 }
 
-# Validate args
+# Parse arguments
+EXTRACT_FILES=()
+PATCH_FILE=""
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --extract)
+            shift
+            while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                EXTRACT_FILES+=("$1")
+                shift
+            done
+            ;;
+        --patch)
+            shift
+            [[ $# -eq 0 ]] && die "--patch requires a file argument"
+            PATCH_FILE="$1"
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            POSITIONAL+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Restore positional args
+set -- "${POSITIONAL[@]}"
+
+# Validate positional args
 [[ $# -ne 2 ]] && usage
 
 TYPE="$1"
@@ -54,6 +96,11 @@ $type_valid || die "Invalid type '$TYPE'. Must be one of: ${VALID_TYPES[*]}"
 
 # Validate topic (alphanumeric, hyphens, underscores)
 [[ "$TOPIC" =~ ^[a-zA-Z0-9_-]+$ ]] || die "Topic must be alphanumeric with hyphens/underscores only"
+
+# Validate patch file if specified
+if [[ -n "$PATCH_FILE" && ! -f "$PATCH_FILE" ]]; then
+    die "Patch file not found: $PATCH_FILE"
+fi
 
 # Must be in a git repo
 git rev-parse --git-dir > /dev/null 2>&1 || die "Not in a git repository"
@@ -106,6 +153,12 @@ echo "  To:   $WORKTREE_PATH"
 echo "  Branch: $BRANCH_NAME"
 if $HAS_LINEAR_ID; then
     echo "  Linear: ${TOPIC%%-*}"
+fi
+if [[ ${#EXTRACT_FILES[@]} -gt 0 ]]; then
+    echo "  Extract: ${EXTRACT_FILES[*]}"
+fi
+if [[ -n "$PATCH_FILE" ]]; then
+    echo "  Patch: $PATCH_FILE"
 fi
 echo
 
@@ -169,6 +222,63 @@ for item in "$REPO_ROOT"/*; do
 done
 
 shopt -u dotglob nullglob
+
+# Handle --extract: copy changed files to worktree, reset in original
+if [[ ${#EXTRACT_FILES[@]} -gt 0 ]]; then
+    echo
+    echo "Extracting changes..."
+    for file in "${EXTRACT_FILES[@]}"; do
+        # Resolve to repo-relative path
+        if [[ "$file" = /* ]]; then
+            rel_file="${file#$REPO_ROOT/}"
+        else
+            rel_file="$file"
+        fi
+
+        src="$REPO_ROOT/$rel_file"
+        dst="$WORKTREE_PATH/$rel_file"
+
+        if [[ -f "$src" ]]; then
+            # Ensure destination directory exists
+            mkdir -p "$(dirname "$dst")"
+            # Copy the changed file
+            cp "$src" "$dst"
+            echo "  Extracted: $rel_file"
+            # Reset the file in original repo
+            git -C "$REPO_ROOT" checkout HEAD -- "$rel_file" 2>/dev/null || true
+        elif git -C "$REPO_ROOT" ls-files --deleted -- "$rel_file" | grep -q .; then
+            # File was deleted - restore in original, delete in worktree
+            git -C "$REPO_ROOT" checkout HEAD -- "$rel_file" 2>/dev/null || true
+            rm -f "$dst" 2>/dev/null || true
+            echo "  Extracted (deletion): $rel_file"
+        else
+            echo "  Skipped (not found): $rel_file"
+        fi
+    done
+    echo "  ✓ Original branch cleaned of extracted files"
+fi
+
+# Handle --patch: apply patch to worktree, reverse-apply to original
+if [[ -n "$PATCH_FILE" ]]; then
+    echo
+    echo "Applying patch..."
+    # Apply patch to worktree
+    if git -C "$WORKTREE_PATH" apply --check "$PATCH_FILE" 2>/dev/null; then
+        git -C "$WORKTREE_PATH" apply "$PATCH_FILE"
+        echo "  ✓ Applied to worktree"
+    else
+        echo "  ⚠ Patch doesn't apply cleanly to worktree, trying with --3way"
+        git -C "$WORKTREE_PATH" apply --3way "$PATCH_FILE" || die "Failed to apply patch to worktree"
+    fi
+
+    # Reverse-apply to original (remove those changes)
+    if git -C "$REPO_ROOT" apply --check -R "$PATCH_FILE" 2>/dev/null; then
+        git -C "$REPO_ROOT" apply -R "$PATCH_FILE"
+        echo "  ✓ Reversed in original"
+    else
+        echo "  ⚠ Could not cleanly reverse patch in original - manual cleanup may be needed"
+    fi
+fi
 
 # Link to Linear issue if present
 if $HAS_LINEAR_ID && command -v linear &> /dev/null; then

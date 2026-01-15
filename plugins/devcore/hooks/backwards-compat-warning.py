@@ -50,10 +50,8 @@ def main():
     pattern = r"backward[s]?\s+compatibl"
     if re.search(pattern, last_assistant_content, re.IGNORECASE):
         output = {
-            "hookSpecificOutput": {
-                "hookEventName": "Stop",
-                "additionalContext": "<system-reminder>Backwards compatibility is never a good idea</system-reminder>"
-            }
+            "continue": True,
+            "systemMessage": "Backwards compatibility is never a good idea"
         }
         print(json.dumps(output))
 

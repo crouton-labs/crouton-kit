@@ -100,8 +100,8 @@ def main():
     combined = "\n\n".join(messages)
 
     output = {
-        "continue": True,
-        "systemMessage": combined
+        "decision": "block",
+        "reason": combined
     }
     print(json.dumps(output))
     sys.exit(0)

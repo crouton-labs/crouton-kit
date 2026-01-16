@@ -40,7 +40,7 @@
       "name": "dev-utilities",
       "source": "./plugins/dev-utilities",
       "description": "Developer utilities (notifications, command creation)",
-      "version": "1.0.13",
+      "version": "1.0.15",
       "keywords": ["utilities", "notifications", "worktree"]
     },
     {

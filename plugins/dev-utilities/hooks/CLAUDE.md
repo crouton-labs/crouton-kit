@@ -13,7 +13,7 @@ Claude Code lifecycle hooks that execute at specific session and tool events.
 ## Hook Implementations
 
 - `protected-branch-guard.py` - PreToolUse: prevents accidental edits to protected files
-- `push-to-protected-guard.py` - PreToolUse: blocks git push to protected branches, instructs to use protected-push
+- `push-to-protected-guard.py` - PreToolUse: blocks git push to protected branches, instructs to use extract-commits
 - `push-pr-prompt.py` - PostToolUse: prompts for git push/PR creation after Bash commands
 - `notification-sound.sh` - Notification: plays success sound feedback
 - `claude-md-manager.mjs` - SessionStart/End: manages CLAUDE.md files

@@ -1,0 +1,359 @@
+#!/usr/bin/env bash
+#
+# extract-commits - Extract commits into a new branch with PR
+#
+# Usage: extract-commits [options] <commit>...
+#
+# Cherry-picks specified commits into a new branch, pushes, and opens a PR.
+# Original branch remains unchanged.
+#
+# Options:
+#   --base <branch>    Target branch for PR (default: main or dev)
+#   --branch <name>    New branch name (default: auto-generated)
+#   --title <title>    PR title (default: from first commit)
+#   --auto-merge       Enable auto-merge and watch CI in background
+#   --dry-run          Show plan without making changes
+#   -h, --help         Show this help
+#
+# Examples:
+#   extract-commits HEAD~2 HEAD~1 HEAD    # Last 3 commits
+#   extract-commits abc123                 # Specific commit
+#   extract-commits HEAD~3..HEAD           # Range (last 3)
+#   extract-commits --base main HEAD       # PR to main
+
+set -euo pipefail
+
+die() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+usage() {
+    cat <<EOF
+Usage: extract-commits [options] <commit>...
+
+Extract commits into a new branch and create a PR.
+Original branch remains unchanged (commits are cherry-picked, not moved).
+
+Arguments:
+  <commit>...        Commits to extract (hashes, HEAD~N, or ranges like HEAD~3..HEAD)
+
+Options:
+  --base <branch>    Target branch for PR (default: auto-detect main/dev)
+  --branch <name>    New branch name (default: auto-generated from commits)
+  --title <title>    PR title (default: from first commit message)
+  --auto-merge       Enable GitHub auto-merge and watch CI in background
+  --dry-run          Show what would be done without making changes
+  -h, --help         Show this help
+
+Examples:
+  extract-commits HEAD                     # Extract last commit
+  extract-commits HEAD~2 HEAD~1 HEAD       # Extract last 3 commits
+  extract-commits abc123 def456            # Extract specific commits
+  extract-commits HEAD~5..HEAD~2           # Extract a range
+  extract-commits --base main HEAD         # PR targeting main
+  extract-commits --auto-merge HEAD        # Auto-merge when CI passes
+EOF
+    exit 0
+}
+
+# Parse arguments
+AUTO_MERGE=false
+BASE_BRANCH=""
+BRANCH_NAME=""
+PR_TITLE=""
+DRY_RUN=false
+COMMITS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --auto-merge)
+            AUTO_MERGE=true
+            shift
+            ;;
+        --base)
+            shift
+            [[ $# -eq 0 ]] && die "--base requires a branch name"
+            BASE_BRANCH="$1"
+            shift
+            ;;
+        --branch)
+            shift
+            [[ $# -eq 0 ]] && die "--branch requires a name"
+            BRANCH_NAME="$1"
+            shift
+            ;;
+        --title)
+            shift
+            [[ $# -eq 0 ]] && die "--title requires a title"
+            PR_TITLE="$1"
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        -*)
+            die "Unknown option: $1"
+            ;;
+        *)
+            COMMITS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+[[ ${#COMMITS[@]} -eq 0 ]] && die "No commits specified. Use -h for help."
+
+# Must be in a git repo
+git rev-parse --git-dir > /dev/null 2>&1 || die "Not in a git repository"
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+REMOTE="origin"
+
+# Check remote exists
+git remote get-url "$REMOTE" > /dev/null 2>&1 || die "No remote '$REMOTE' configured"
+
+REMOTE_URL="$(git remote get-url "$REMOTE")"
+
+# Check GitHub
+[[ "$REMOTE_URL" =~ github\.com ]] || die "This script only works with GitHub repositories"
+
+# Parse owner/repo
+if [[ "$REMOTE_URL" =~ github\.com[:/]([^/]+)/([^/]+?)(\.git)?$ ]]; then
+    OWNER="${BASH_REMATCH[1]}"
+    REPO="${BASH_REMATCH[2]}"
+else
+    die "Could not parse GitHub owner/repo from remote URL"
+fi
+
+# Auto-detect base branch if not specified
+if [[ -z "$BASE_BRANCH" ]]; then
+    # Check for common base branches
+    for candidate in dev development main master; do
+        if git rev-parse --verify "$REMOTE/$candidate" > /dev/null 2>&1; then
+            BASE_BRANCH="$candidate"
+            break
+        fi
+    done
+    [[ -z "$BASE_BRANCH" ]] && die "Could not auto-detect base branch. Use --base to specify."
+fi
+
+echo "Base branch: $BASE_BRANCH"
+
+# Fetch latest
+echo "Fetching latest from $REMOTE..."
+git fetch "$REMOTE" "$BASE_BRANCH" --quiet
+
+# Expand commit specifiers to actual commit hashes
+expand_commits() {
+    local result=()
+    for spec in "$@"; do
+        if [[ "$spec" == *".."* ]]; then
+            # Range: HEAD~3..HEAD
+            while IFS= read -r hash; do
+                result+=("$hash")
+            done < <(git rev-list --reverse "$spec" 2>/dev/null)
+        else
+            # Single commit
+            local hash
+            hash=$(git rev-parse --verify "$spec" 2>/dev/null) || die "Invalid commit: $spec"
+            result+=("$hash")
+        fi
+    done
+    printf '%s\n' "${result[@]}"
+}
+
+# Get expanded commit list
+COMMIT_HASHES=()
+while IFS= read -r hash; do
+    [[ -n "$hash" ]] && COMMIT_HASHES+=("$hash")
+done < <(expand_commits "${COMMITS[@]}")
+
+[[ ${#COMMIT_HASHES[@]} -eq 0 ]] && die "No valid commits found"
+
+echo "Commits to extract: ${#COMMIT_HASHES[@]}"
+for hash in "${COMMIT_HASHES[@]}"; do
+    echo "  $(git log -1 --format='%h %s' "$hash")"
+done
+
+# Get first commit info for naming/title
+FIRST_COMMIT="${COMMIT_HASHES[0]}"
+FIRST_COMMIT_MSG="$(git log -1 --format='%s' "$FIRST_COMMIT")"
+FIRST_COMMIT_SHORT="$(git log -1 --format='%h' "$FIRST_COMMIT")"
+
+# Generate branch name if not provided
+if [[ -z "$BRANCH_NAME" ]]; then
+    USERNAME=$(git config user.name 2>/dev/null | awk '{print tolower($1)}' || echo "user")
+    SLUG=$(echo "$FIRST_COMMIT_MSG" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//' | cut -c1-40)
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    BRANCH_NAME="${USERNAME}/extract/${SLUG}-${TIMESTAMP}"
+fi
+
+# Use first commit message as PR title if not provided
+if [[ -z "$PR_TITLE" ]]; then
+    if [[ ${#COMMIT_HASHES[@]} -eq 1 ]]; then
+        PR_TITLE="$FIRST_COMMIT_MSG"
+    else
+        PR_TITLE="$FIRST_COMMIT_MSG (+$((${#COMMIT_HASHES[@]} - 1)) more)"
+    fi
+fi
+
+echo ""
+echo "Plan:"
+echo "  1. Create branch '$BRANCH_NAME' from $REMOTE/$BASE_BRANCH"
+echo "  2. Cherry-pick ${#COMMIT_HASHES[@]} commit(s)"
+echo "  3. Push to $REMOTE"
+echo "  4. Create PR: '$PR_TITLE' -> $BASE_BRANCH"
+echo "  5. Return to '$CURRENT_BRANCH' (unchanged)"
+if $AUTO_MERGE; then
+    echo "  6. Enable auto-merge and watch CI"
+fi
+echo ""
+
+if $DRY_RUN; then
+    echo "[Dry run - no changes made]"
+    exit 0
+fi
+
+# Stash any uncommitted changes
+STASHED=false
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "Stashing uncommitted changes..."
+    git stash push -m "extract-commits: temporary stash"
+    STASHED=true
+fi
+
+cleanup() {
+    # Return to original branch
+    git checkout "$CURRENT_BRANCH" --quiet 2>/dev/null || true
+    # Restore stash if we made one
+    if $STASHED; then
+        git stash pop --quiet 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+# Create new branch from remote base
+echo "Creating branch '$BRANCH_NAME' from $REMOTE/$BASE_BRANCH..."
+git checkout -b "$BRANCH_NAME" "$REMOTE/$BASE_BRANCH" --quiet
+
+# Cherry-pick commits
+echo "Cherry-picking commits..."
+for hash in "${COMMIT_HASHES[@]}"; do
+    echo "  Picking $(git log -1 --format='%h %s' "$hash")"
+    if ! git cherry-pick "$hash" --no-commit; then
+        echo ""
+        echo "Cherry-pick conflict on $hash"
+        echo "Resolve conflicts and run: git cherry-pick --continue"
+        echo "Or abort with: git cherry-pick --abort && git checkout $CURRENT_BRANCH"
+        exit 1
+    fi
+    git commit -C "$hash"
+done
+
+# Push
+echo "Pushing to $REMOTE..."
+git push -u "$REMOTE" "$BRANCH_NAME"
+
+# Create PR
+echo "Creating pull request..."
+PR_BODY="Extracted commits from \`$CURRENT_BRANCH\`.
+
+**Commits:**
+$(for hash in "${COMMIT_HASHES[@]}"; do git log -1 --format='- %h %s' "$hash"; done)
+
+---
+*Created by \`extract-commits\`*"
+
+PR_URL=$(gh pr create \
+    --base "$BASE_BRANCH" \
+    --head "$BRANCH_NAME" \
+    --title "$PR_TITLE" \
+    --body "$PR_BODY" 2>&1)
+
+echo "PR created: $PR_URL"
+
+# Return to original branch (trap will handle this, but be explicit)
+echo "Returning to '$CURRENT_BRANCH'..."
+git checkout "$CURRENT_BRANCH" --quiet
+
+echo ""
+echo "Done!"
+echo "  Branch: $BRANCH_NAME"
+echo "  PR: $PR_URL"
+echo "  Original branch '$CURRENT_BRANCH' unchanged"
+
+# Handle auto-merge
+if $AUTO_MERGE; then
+    echo ""
+    echo "Enabling auto-merge..."
+
+    PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+
+    if gh pr merge "$PR_NUMBER" --auto --squash 2>/dev/null; then
+        echo "Auto-merge enabled (squash)"
+    else
+        echo "Could not enable auto-merge (may require admin permissions)"
+        echo "  Manual: gh pr merge $PR_NUMBER --auto --squash"
+    fi
+
+    # Background CI watcher
+    echo "Starting CI watcher in background..."
+
+    WATCHER_SCRIPT=$(mktemp)
+    cat > "$WATCHER_SCRIPT" << 'WATCHER_EOF'
+#!/usr/bin/env bash
+PR_NUMBER="$1"
+MAX_WAIT=3600
+POLL_INTERVAL=30
+ELAPSED=0
+
+echo "[$(date)] Watching PR #$PR_NUMBER..."
+
+while [[ $ELAPSED -lt $MAX_WAIT ]]; do
+    STATUS=$(gh pr view "$PR_NUMBER" --json state,mergeStateStatus 2>/dev/null)
+    [[ -z "$STATUS" ]] && { sleep $POLL_INTERVAL; ELAPSED=$((ELAPSED + POLL_INTERVAL)); continue; }
+
+    STATE=$(echo "$STATUS" | jq -r '.state')
+    MERGE_STATE=$(echo "$STATUS" | jq -r '.mergeStateStatus')
+
+    if [[ "$STATE" == "MERGED" ]]; then
+        echo "[$(date)] PR #$PR_NUMBER merged!"
+        command -v osascript &>/dev/null && osascript -e "display notification \"PR #$PR_NUMBER merged\" with title \"PR Merged\""
+        exit 0
+    fi
+
+    if [[ "$STATE" == "CLOSED" ]]; then
+        echo "[$(date)] PR #$PR_NUMBER closed without merge"
+        exit 1
+    fi
+
+    if [[ "$MERGE_STATE" == "BLOCKED" ]]; then
+        FAILED=$(gh pr checks "$PR_NUMBER" --json state 2>/dev/null | jq '[.[] | select(.state == "FAILURE")] | length')
+        if [[ "$FAILED" -gt 0 ]]; then
+            echo "[$(date)] CI failed for PR #$PR_NUMBER"
+            command -v osascript &>/dev/null && osascript -e "display notification \"PR #$PR_NUMBER CI failed\" with title \"CI Failed\""
+            exit 1
+        fi
+    fi
+
+    sleep $POLL_INTERVAL
+    ELAPSED=$((ELAPSED + POLL_INTERVAL))
+done
+
+echo "[$(date)] Timeout waiting for PR #$PR_NUMBER"
+exit 2
+WATCHER_EOF
+
+    chmod +x "$WATCHER_SCRIPT"
+    LOG_FILE="/tmp/extract-commits-watcher-${PR_NUMBER}.log"
+    nohup bash "$WATCHER_SCRIPT" "$PR_NUMBER" > "$LOG_FILE" 2>&1 &
+    WATCHER_PID=$!
+
+    echo "CI watcher started (PID: $WATCHER_PID)"
+    echo "  Log: $LOG_FILE"
+fi

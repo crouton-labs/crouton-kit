@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PreToolUse hook that blocks git push to protected branches.
-Instructs the agent to use protected-push script instead.
+Instructs the agent to use extract-commits script instead.
 
 Detects:
 - git push (to current branch)
@@ -22,9 +22,9 @@ from pathlib import Path
 # Cache for branch protection status
 _protection_cache: dict[str, bool] = {}
 
-# Get the protected-push script path from plugin root
+# Get the extract-commits script path from plugin root
 _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or str(Path(__file__).parent.parent)
-PROTECTED_PUSH = f"{_plugin_root}/bin/protected-push"
+EXTRACT_COMMITS = f"{_plugin_root}/bin/extract-commits"
 
 
 def get_repo_root() -> str | None:
@@ -229,18 +229,19 @@ def main():
 You have commits on '{branch}' that need to go through a PR.
 
 Run instead:
-  {PROTECTED_PUSH}
+  {EXTRACT_COMMITS} HEAD           # Extract last commit
+  {EXTRACT_COMMITS} HEAD~2..HEAD   # Extract last 3 commits
 
 This will:
-1. Create a new branch from your commits
+1. Cherry-pick commits to a new branch
 2. Push that branch
 3. Open a PR to '{branch}'
-4. Reset local '{branch}' to match remote
+4. Leave '{branch}' unchanged
 
 Options:
-  {PROTECTED_PUSH} --auto-merge    # Auto-merge when CI passes
-  {PROTECTED_PUSH} --dry-run       # Preview without making changes
-  {PROTECTED_PUSH} --help          # More options"""
+  {EXTRACT_COMMITS} --auto-merge HEAD   # Auto-merge when CI passes
+  {EXTRACT_COMMITS} --dry-run HEAD      # Preview without making changes
+  {EXTRACT_COMMITS} --help              # More options"""
 
     print(error_msg, file=sys.stderr)
     sys.exit(2)  # Exit code 2 = block and show message

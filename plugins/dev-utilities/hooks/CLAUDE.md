@@ -24,4 +24,3 @@ Claude Code lifecycle hooks that execute at specific session and tool events.
 - Hooks are **synchronous** - execution blocks the operation
 - Use `${CLAUDE_PLUGIN_ROOT}` to reference hook paths in hooks.json
 - Matchers support `|` for multiple tools (e.g., `Write|Edit`)
-# Test

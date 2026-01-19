@@ -4,6 +4,7 @@ description: Validate implementation plans against specs. Use after creating a p
 user-invocable: false
 context: fork
 agent: general-purpose
+model: sonnet
 ---
 
 # Review Plan Against Spec

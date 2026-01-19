@@ -4,6 +4,7 @@ description: Validate feature specs for relevance, edge cases, and compatibility
 user-invocable: false
 context: fork
 agent: general-purpose
+model: sonnet
 ---
 
 # Review Spec

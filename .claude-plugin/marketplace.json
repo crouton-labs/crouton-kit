@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "crouton-kit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "owner": {
     "name": "Silas Rhyneer",
     "email": "silas@example.com"
@@ -13,56 +13,88 @@
       "source": "./plugins/devcore",
       "description": "Core development agents and code quality hooks",
       "version": "1.0.1",
-      "keywords": ["agents", "code-review", "quality"]
+      "keywords": [
+        "agents",
+        "code-review",
+        "quality"
+      ]
     },
     {
       "name": "learn",
       "source": "./plugins/learn",
       "description": "Interactive learning commands to help users understand code deeply",
       "version": "1.0.0",
-      "keywords": ["learning", "education", "interactive"]
+      "keywords": [
+        "learning",
+        "education",
+        "interactive"
+      ]
     },
     {
       "name": "git-smart",
       "source": "./plugins/git-smart",
       "description": "Smart git commits with security and quality review",
       "version": "1.0.0",
-      "keywords": ["git", "commits", "workflow"]
+      "keywords": [
+        "git",
+        "commits",
+        "workflow"
+      ]
     },
     {
       "name": "knowledge-capture",
       "source": "./plugins/knowledge-capture",
       "description": "Requirements gathering, interviews, and learning commands",
       "version": "1.0.0",
-      "keywords": ["requirements", "interview", "learning"]
+      "keywords": [
+        "requirements",
+        "interview",
+        "learning"
+      ]
     },
     {
       "name": "dev-utilities",
       "source": "./plugins/dev-utilities",
       "description": "Developer utilities (notifications, command creation)",
       "version": "1.0.15",
-      "keywords": ["utilities", "notifications", "worktree"]
+      "keywords": [
+        "utilities",
+        "notifications",
+        "worktree"
+      ]
     },
     {
       "name": "rpi",
       "source": "./plugins/rpi",
       "description": "Feature development workflow: arch → plan → implement → review → fix",
       "version": "1.0.1",
-      "keywords": ["workflow", "development", "planning"]
+      "keywords": [
+        "workflow",
+        "development",
+        "planning"
+      ]
     },
     {
       "name": "web",
       "source": "./plugins/web",
       "description": "Web development tools including frontend design workflows",
       "version": "1.0.0",
-      "keywords": ["web", "frontend", "design"]
+      "keywords": [
+        "web",
+        "frontend",
+        "design"
+      ]
     },
     {
       "name": "hookify",
       "source": "./plugins/hookify",
       "description": "Create configurable hooks from markdown rule files",
       "version": "1.0.0",
-      "keywords": ["hooks", "rules", "automation"]
+      "keywords": [
+        "hooks",
+        "rules",
+        "automation"
+      ]
     }
   ]
 }

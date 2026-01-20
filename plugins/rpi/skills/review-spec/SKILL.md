@@ -65,14 +65,10 @@ If no issues found:
 PASS
 ```
 
-If issues exist, plaintext feedback:
+If issues exist, numbered plaintext feedback:
 ```
-Scope: [what strays from the feature]
-Edge case: [missing error/boundary handling]
-Architecture: [code smell or design issue]
-Library: [outdated or non-idiomatic usage]
-Detail level: [too technical for a spec]
-Conflict: [contradicts existing pattern in X file]
-Context: [domain X needs a context document for planning]
+1. Scope: [what strays from the feature]
+2. Edge case: [missing error/boundary handling]
+3. Architecture: [code smell or design issue]
 ...
 ```

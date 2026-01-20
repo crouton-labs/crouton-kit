@@ -41,9 +41,9 @@ If all requirements are covered and no issues found:
 PASS
 ```
 
-If issues exist, provide plaintext feedback:
+If issues exist, provide numbered plaintext feedback:
 ```
-Missing: [requirement from spec not in plan]
-Ambiguous: [unclear section that needs resolution]
+1. Missing: [requirement from spec not in plan]
+2. Ambiguous: [unclear section that needs resolution]
 ...
 ```

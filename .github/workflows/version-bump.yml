@@ -1,0 +1,135 @@
+name: Version Bump
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    # Skip if commit message contains [skip ci] or is a version bump commit
+    if: "!contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, 'chore: bump version')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Determine version bump type
+        id: bump-type
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+
+          # Check for breaking change
+          if echo "$COMMIT_MSG" | grep -qE '^[a-z]+(\(.+\))?!:|BREAKING CHANGE:'; then
+            echo "type=major" >> $GITHUB_OUTPUT
+          # Check for feature
+          elif echo "$COMMIT_MSG" | grep -qE '^feat(\(.+\))?:'; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          # Default to patch for fix, chore, docs, refactor, etc.
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          # Get list of changed files
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Bump versions
+        id: bump
+        run: |
+          BUMP_TYPE="${{ steps.bump-type.outputs.type }}"
+          CHANGED_FILES="${{ steps.changed-files.outputs.files }}"
+          MARKETPLACE="./.claude-plugin/marketplace.json"
+          UPDATED_PLUGINS=""
+
+          # Function to bump semver
+          bump_version() {
+            local version=$1
+            local type=$2
+            IFS='.' read -r major minor patch <<< "$version"
+
+            case $type in
+              major)
+                echo "$((major + 1)).0.0"
+                ;;
+              minor)
+                echo "$major.$((minor + 1)).0"
+                ;;
+              patch)
+                echo "$major.$minor.$((patch + 1))"
+                ;;
+            esac
+          }
+
+          # Find which plugins changed
+          PLUGINS=$(ls -d plugins/*/ 2>/dev/null | xargs -I {} basename {} || true)
+
+          for plugin in $PLUGINS; do
+            if echo "$CHANGED_FILES" | grep -q "^plugins/$plugin/"; then
+              PLUGIN_JSON="plugins/$plugin/.claude-plugin/plugin.json"
+
+              if [ -f "$PLUGIN_JSON" ]; then
+                # Get current version from plugin.json
+                CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
+                NEW_VERSION=$(bump_version "$CURRENT_VERSION" "$BUMP_TYPE")
+
+                # Update plugin.json
+                jq --arg v "$NEW_VERSION" '.version = $v' "$PLUGIN_JSON" > tmp.json && mv tmp.json "$PLUGIN_JSON"
+
+                # Update marketplace.json entry for this plugin
+                jq --arg name "$plugin" --arg v "$NEW_VERSION" \
+                  '(.plugins[] | select(.name == $name)).version = $v' \
+                  "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
+
+                UPDATED_PLUGINS="$UPDATED_PLUGINS $plugin:$NEW_VERSION"
+                echo "Bumped $plugin: $CURRENT_VERSION -> $NEW_VERSION"
+              fi
+            fi
+          done
+
+          # Always bump marketplace version
+          CURRENT_MARKETPLACE_VERSION=$(jq -r '.version' "$MARKETPLACE")
+          NEW_MARKETPLACE_VERSION=$(bump_version "$CURRENT_MARKETPLACE_VERSION" "$BUMP_TYPE")
+          jq --arg v "$NEW_MARKETPLACE_VERSION" '.version = $v' "$MARKETPLACE" > tmp.json && mv tmp.json "$MARKETPLACE"
+          echo "Bumped marketplace: $CURRENT_MARKETPLACE_VERSION -> $NEW_MARKETPLACE_VERSION"
+
+          echo "marketplace_version=$NEW_MARKETPLACE_VERSION" >> $GITHUB_OUTPUT
+          echo "updated_plugins=$UPDATED_PLUGINS" >> $GITHUB_OUTPUT
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Check if there are changes to commit
+          if git diff --quiet; then
+            echo "No version changes to commit"
+            exit 0
+          fi
+
+          git add .claude-plugin/marketplace.json
+          git add plugins/*/.claude-plugin/plugin.json 2>/dev/null || true
+
+          COMMIT_MSG="chore: bump version to ${{ steps.bump.outputs.marketplace_version }}"
+          if [ -n "${{ steps.bump.outputs.updated_plugins }}" ]; then
+            COMMIT_MSG="$COMMIT_MSG (plugins:${{ steps.bump.outputs.updated_plugins }})"
+          fi
+
+          git commit -m "$COMMIT_MSG [skip ci]"
+          git push

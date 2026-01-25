@@ -28,11 +28,13 @@ Parse the input to extract:
    - Mark as: covered, partially covered, or missing
 
 4. **Check plan quality**
-   - No ambiguous language ("might", "could", "possibly")
-   - No deferred decisions ("investigate later", "TBD")
-   - No conditional branches ("if X, then Y")
-   - No unexplored complexity ("this may be tricky")
-   - No irrelevant information
+
+   **Threshold: Only flag issues that would block implementation or cause genuine confusion.** Minor stylistic preferences are not findings.
+
+   - Ambiguous language → only if unclear enough that implementation would stall or go wrong
+   - Deferred decisions → only if missing info needed to start work
+   - Conditional branches → only if they represent unresolved decisions (valid branching is fine)
+   - Unexplored complexity → only if it hides work that would surprise the implementer
 
 ## Output
 

@@ -22,10 +22,11 @@ model: sonnet
 
 3. **Validate against criteria**
 
+   **Threshold: Only flag issues that would block implementation or cause genuine confusion.** Minor preferences and theoretical concerns are not findings.
+
 ### Relevance
 - Spec stays focused on the feature
-- No tangential details or scope creep
-- Clear boundaries on what's in/out
+- Scope creep → only flag if it would cause wasted implementation work
 
 ### Edge Cases
 - Error states covered
@@ -33,30 +34,19 @@ model: sonnet
 - Failure modes considered
 
 ### Architecture Quality
-- No code smells in proposed architecture
-- Abstractions are appropriate (not over/under-engineered)
+- Only flag actual code smells, not "could be cleaner"
 - Integration points are clean
-
-### Library Usage
-- If external libraries mentioned, verify idiomatic usage
-- Flag outdated patterns or deprecated approaches
-- Check compatibility with existing stack
 
 ### Abstraction Level
 - Behavioral/contractual, not implementation details
-- No pseudocode or type definitions sneaking in
-- High-level architecture is fine, micro-details are not
+- Only flag if implementation details would constrain valid options
 
 ### Pattern Compatibility
 - Doesn't contradict CLAUDE.md guidance
 - Respects existing rules in .claude/rules/
-- Fits with codebase conventions found in related files
 
 ### Context Coverage
-- If spec spans multiple domains (10+ files, multiple layers)
-- Check `.claude/context/` for corresponding context documents
-- Flag if large spec lacks context docs for planning
-- Each major domain should have its own context file
+- Only flag if spec is genuinely huge (20+ files, multiple major domains) and splitting would meaningfully help planning
 
 ## Output
 

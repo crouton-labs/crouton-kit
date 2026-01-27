@@ -84,7 +84,7 @@ Choose strategy based on change size and structure:
 Validation strategy:
 - ~1 validation agent per 3 issues found
 - Cluster issues by functionality/files to avoid re-reading same code
-- Each validator focuses on one cluster
+- Each validator focuses on one cluster 
 
 Validation by type:
 - **Bugs/Security**: Opus verifies issue is real and exploitable/broken

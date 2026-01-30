@@ -26,7 +26,49 @@ def main():
     except (IOError, FileNotFoundError):
         sys.exit(0)
 
-    # Track edits and skill runs
+    # Find the last assistant turn
+    last_assistant_line = -1
+    for line_num, line in enumerate(lines):
+        try:
+            entry = json.loads(line.strip())
+        except json.JSONDecodeError:
+            continue
+        if entry.get("type") == "assistant":
+            last_assistant_line = line_num
+
+    if last_assistant_line < 0:
+        sys.exit(0)
+
+    # Check if the last assistant turn edited spec/plan files
+    current_turn_edited_spec = False
+    current_turn_edited_plan = False
+
+    try:
+        entry = json.loads(lines[last_assistant_line].strip())
+    except json.JSONDecodeError:
+        sys.exit(0)
+
+    message = entry.get("message", {})
+    content = message.get("content", [])
+
+    for block in content:
+        if block.get("type") != "tool_use":
+            continue
+        tool_name = block.get("name", "")
+        tool_input = block.get("input", {})
+
+        if tool_name in ("Write", "Edit"):
+            file_path = tool_input.get("file_path", "")
+            if file_path.endswith(".spec.md"):
+                current_turn_edited_spec = True
+            elif file_path.endswith(".plan.md"):
+                current_turn_edited_plan = True
+
+    # Only proceed if this turn edited spec/plan files
+    if not current_turn_edited_spec and not current_turn_edited_plan:
+        sys.exit(0)
+
+    # Now scan full history for review skill runs after the edits
     last_spec_edit_line = -1
     last_plan_edit_line = -1
     review_spec_run_line = -1

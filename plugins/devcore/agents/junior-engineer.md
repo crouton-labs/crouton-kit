@@ -1,6 +1,6 @@
 ---
 name: junior-engineer
-description: Focused implementation agent for well-specified tasks. Follows provided patterns exactly. Reports blockers immediately. 
+description: Trivial, repetitive changes: renames, migrations, config updates, obvious implementations. For anything requiring judgment, use programmer. 
 model: haiku
 allowedAgents: Explore
 thinking: 4000

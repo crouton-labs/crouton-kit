@@ -49,8 +49,8 @@ def check_anthropic_models(content: str) -> list[str]:
     
     return issues
 
-def check_fallback_patterns(content: str, file_path: str) -> list[str]:
-    """Check for fallback and legacy patterns in code files only."""
+def check_backwards_compat_patterns(content: str, file_path: str) -> list[str]:
+    """Check for backwards compatibility and legacy patterns - these are BLOCKING errors."""
     issues = []
 
     # Only check code files (not markdown, yaml, json, etc.)
@@ -58,16 +58,38 @@ def check_fallback_patterns(content: str, file_path: str) -> list[str]:
     if not any(file_path.endswith(ext) for ext in code_extensions):
         return issues
 
-    fallback_patterns = [
-        (r'\bfallback\b', 'WARNING: Fallbacks detected. Code should fail fast and throw errors early. Consider rewriting without fallback logic.'),
-        (r'\blegacy\b', 'WARNING: Legacy code detected. Consider removing legacy code and using modern implementations.'),
-        (r'backward[s]?\s+compatib', 'WARNING: Backwards compatibility detected. Consider breaking existing code if needed for better implementation.'),
+    # These patterns are NEVER acceptable unless user explicitly requested them
+    blocking_patterns = [
+        (r'\bfallback\b', 'BLOCKED: Fallback pattern detected'),
+        (r'\blegacy\b', 'BLOCKED: Legacy code pattern detected'),
+        (r'backward[s]?\s+compatib', 'BLOCKED: Backwards compatibility pattern detected'),
+        (r'\bdeprecated\b', 'BLOCKED: Deprecated pattern detected'),
+        (r'\bcompat(?:ibility)?\s*(?:mode|layer|shim)\b', 'BLOCKED: Compatibility layer detected'),
+    ]
+
+    for pattern, message in blocking_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            issues.append(message)
+
+    return issues
+
+
+def check_fallback_patterns(content: str, file_path: str) -> list[str]:
+    """Check for fallback patterns in code files only - these are warnings."""
+    issues = []
+
+    # Only check code files (not markdown, yaml, json, etc.)
+    code_extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp']
+    if not any(file_path.endswith(ext) for ext in code_extensions):
+        return issues
+
+    warning_patterns = [
         (r'\|\|\s*[\'"][^\'"]*[\'"]', 'WARNING: Default value fallbacks (|| "default") detected. Consider using explicit error handling instead.'),
         (r'\?\?\s*[\'"][^\'"]*[\'"]', 'WARNING: Nullish coalescing with defaults (?? "default") detected. Consider replacing with explicit validation.'),
         (r'try\s*\{[^}]*\}\s*catch\s*\([^)]*\)\s*\{[^}]*\}', 'WARNING: Empty or generic catch blocks may hide errors. Ensure proper error handling and re-throwing.'),
     ]
 
-    for pattern, message in fallback_patterns:
+    for pattern, message in warning_patterns:
         if re.search(pattern, content, re.IGNORECASE):
             issues.append(message)
 
@@ -142,18 +164,50 @@ def main():
     blocking_issues = []
     blocking_issues.extend(check_openai_models(content))
     blocking_issues.extend(check_anthropic_models(content))
-    
+
+    # Check for backwards compat / legacy patterns - these are HARD BLOCKS
+    compat_issues = check_backwards_compat_patterns(content, file_path)
+
     # Collect warning issues
     warning_issues = []
     warning_issues.extend(check_fallback_patterns(content, file_path))
     warning_issues.extend(check_any_type_usage(content))
-    
-    # Handle blocking issues
+
+    # Handle backwards compat issues - ABORT IMMEDIATELY
+    if compat_issues:
+        error_message = f"""CRITICAL: Unauthorized backwards compatibility or legacy code detected in {file_path}
+
+Detected patterns:
+"""
+        for issue in compat_issues:
+            error_message += f"  - {issue}\n"
+
+        error_message += """
+THIS IS A MISTAKE. You were NOT asked to maintain backwards compatibility or support legacy code.
+
+REQUIRED ACTIONS:
+1. STOP what you are doing immediately
+2. Use the Explore agent to re-examine the codebase and requirements
+3. Replan your implementation WITHOUT any backwards compatibility concerns
+4. Write clean, modern code that breaks existing behavior if needed
+
+Do NOT proceed with this code. Backwards compatibility is NEVER acceptable unless the user EXPLICITLY requested it with words like "maintain compatibility" or "don't break existing code".
+
+If you believe backwards compatibility IS required, ask the user to confirm before proceeding."""
+
+        output = {
+            "decision": "block",
+            "reason": error_message
+        }
+        print(json.dumps(output))
+        sys.exit(0)
+
+    # Handle other blocking issues (models)
     if blocking_issues:
         error_message = f"Code quality issues detected in {file_path}:\n\n"
         for i, issue in enumerate(blocking_issues, 1):
             error_message += f"{i}. {issue}\n"
-        
+
         error_message += "\nPlease address these issues and try again."
         
         # Use JSON output to provide structured feedback

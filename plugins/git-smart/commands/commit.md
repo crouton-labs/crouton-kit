@@ -2,6 +2,7 @@
 description: Stage and commit changes into logical commits
 argument-hint: [scope]
 allowed-tools: Bash(git:*)
+model: sonnet
 ---
 
 Stage and commit changes into logical commits.
@@ -9,6 +10,10 @@ Stage and commit changes into logical commits.
 **Scope:** $ARGUMENTS (empty = all changes)
 
 ## Context
+
+**Git repo:** !`git rev-parse --is-inside-work-tree 2>/dev/null || echo "NOT_A_GIT_REPO"`
+
+If the above shows "NOT_A_GIT_REPO", inform the user this command requires a git repository and stop.
 
 **Status:**
 ```

@@ -8,45 +8,46 @@ import sys
 def check_openai_models(content: str) -> list[str]:
     """Check for outdated OpenAI model usage."""
     issues = []
-    
-    # Pattern for OpenAI model references
-    # Note: gpt-4o variants are allowed because they support jsonSchema mode which gpt-4.1 doesn't
+
+    # Latest models (Feb 2026): gpt-5.2, gpt-5.2-pro, gpt-5.2-codex
+    # Still supported: gpt-5.1, gpt-5
+    # Retiring Feb 13 2026: gpt-4o, gpt-4.1, gpt-4.1-mini, o4-mini
     openai_patterns = [
-        (r'gpt-4(?:-turbo)?(?:-preview)?(?!\.1|5|o)', 'Use latest OpenAI models: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, or reasoning models gpt-5, gpt-5-mini, gpt-5-nano instead of older GPT-4 variants'),
-        (r'gpt-3\.5-turbo', 'Use latest OpenAI models: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, or reasoning models gpt-5, gpt-5-mini, gpt-5-nano instead of GPT-3.5'),
+        (r'gpt-3\.5', 'Use gpt-5.2 or gpt-5.2-codex instead of GPT-3.5'),
+        (r'gpt-4(?![.o\d])', 'Use gpt-5.2 instead of GPT-4 base'),
+        (r'gpt-4-turbo', 'Use gpt-5.2 instead of GPT-4 Turbo'),
+        (r'gpt-4o', 'Use gpt-5.2 instead of GPT-4o (retiring Feb 2026)'),
+        (r'gpt-4\.[01]', 'Use gpt-5.2 instead of GPT-4.x variants (retiring Feb 2026)'),
+        (r'gpt-4\.5-preview', 'Use gpt-5.2 instead of GPT-4.5 preview (deprecated)'),
+        (r'o4-mini', 'Use gpt-5.2 instead of o4-mini (retiring Feb 2026)'),
     ]
-    
+
     for pattern, message in openai_patterns:
         if re.search(pattern, content, re.IGNORECASE):
             issues.append(message)
-    
-    # Check for temperature and max_tokens usage with OpenAI
-    # GPT-5 models require temperature: 1 explicitly since AI SDK defaults to 0
-    has_temp_or_tokens = re.search(r'temperature\s*[:=]|max_tokens\s*[:=]', content)
-    has_openai = re.search(r'gpt-|openai', content, re.IGNORECASE)
-    has_gpt5 = re.search(r'gpt-5', content, re.IGNORECASE)
 
-    if has_temp_or_tokens and has_openai and not has_gpt5:
-        issues.append('Do not pass temperature or max_tokens parameters with OpenAI models - use default settings')
-    
     return issues
 
 def check_anthropic_models(content: str) -> list[str]:
     """Check for outdated Anthropic model usage."""
     issues = []
-    
-    # Pattern for outdated Claude models
+
+    # Latest models (Feb 2026): claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5
+    # Claude 4.0 and earlier are deprecated
     anthropic_patterns = [
-        (r'claude-3-5-sonnet|claude-3\.5-sonnet', 'Use claude-4-sonnet (Sonnet 4.0) instead of Claude 3.5 Sonnet'),
-        (r'claude-3-7-sonnet|claude-3\.7-sonnet', 'Use claude-4-sonnet (Sonnet 4.0) instead of Claude 3.7 Sonnet'),
-        (r'claude-3-opus', 'Use claude-4-sonnet (Sonnet 4.0) for best performance'),
-        (r'claude-3-haiku', 'Use claude-4-sonnet (Sonnet 4.0) for better capabilities'),
+        (r'claude-3-5-sonnet|claude-3\.5-sonnet', 'Use claude-sonnet-4-5 instead of Claude 3.5 Sonnet'),
+        (r'claude-3-7-sonnet|claude-3\.7-sonnet', 'Use claude-sonnet-4-5 instead of Claude 3.7 Sonnet'),
+        (r'claude-3-opus', 'Use claude-opus-4-5 instead of Claude 3 Opus'),
+        (r'claude-3-haiku', 'Use claude-haiku-4-5 instead of Claude 3 Haiku'),
+        (r'claude-4-sonnet(?!-4-5)', 'Use claude-sonnet-4-5 instead of Claude 4.0 Sonnet'),
+        (r'claude-4-opus(?!-4-5)', 'Use claude-opus-4-5 instead of Claude 4.0 Opus'),
+        (r'claude-4-haiku(?!-4-5)', 'Use claude-haiku-4-5 instead of Claude 4.0 Haiku'),
     ]
-    
+
     for pattern, message in anthropic_patterns:
         if re.search(pattern, content, re.IGNORECASE):
             issues.append(message)
-    
+
     return issues
 
 def check_fallback_patterns(content: str, file_path: str) -> list[str]:
@@ -116,11 +117,16 @@ def main():
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
     hook_event = input_data.get("hook_event_name", "PreToolUse")
-    
+
     # Only check Write and Edit operations
     if tool_name not in ["Write", "Edit", "MultiEdit"]:
         sys.exit(0)
-    
+
+    # Don't check the hook file itself (contains model name patterns as strings)
+    file_path = tool_input.get("file_path", "")
+    if "code-quality-checker.py" in file_path:
+        sys.exit(0)
+
     # Get file content
     content = ""
     if tool_name == "Write":
@@ -131,13 +137,10 @@ def main():
         # Check all edits
         edits = tool_input.get("edits", [])
         content = "\n".join([edit.get("new_string", "") for edit in edits])
-    
+
     if not content:
         sys.exit(0)
-    
-    # Get file path for context
-    file_path = tool_input.get("file_path", "")
-    
+
     # Collect blocking issues (model-related)
     blocking_issues = []
     blocking_issues.extend(check_openai_models(content))
@@ -155,7 +158,7 @@ def main():
             error_message += f"{i}. {issue}\n"
         
         error_message += "\nPlease address these issues and try again."
-        
+
         # Use JSON output to provide structured feedback
         output = {
             "decision": "block",
@@ -163,7 +166,7 @@ def main():
         }
         print(json.dumps(output))
         sys.exit(0)
-    
+
     # Handle warnings (show but don't block)
     if warning_issues:
         warning_message = f"Code quality issues detected in {file_path}:\n\n"
@@ -171,12 +174,12 @@ def main():
             warning_message += f"{i}. {issue}\n"
 
         warning_message = f"""<system-reminder>
-        
+
 {warning_message}
-        
+
 It is strongly advised to address these issues and try again.
 </system-reminder>"""
-        
+
         # Use JSON output to show warnings without blocking
         output = {
             "hookSpecificOutput": {
@@ -186,7 +189,7 @@ It is strongly advised to address these issues and try again.
         }
         print(json.dumps(output))
         sys.exit(0)
-    
+
     # If no issues, allow the operation to proceed
     sys.exit(0)
 

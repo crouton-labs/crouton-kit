@@ -1,5 +1,5 @@
 ---
-description: After /rpi/plan - execute with parallel agents
+description: After /rpi/plan - execute with agent team
 argument-hint: <plan-path or description>
 disable-model-invocation: true
 ---
@@ -16,48 +16,68 @@ Extract the plan reference and any implementation guidance.
 
 ## Objective
 
-Execute the implementation plan by delegating work to agents. Maximize parallelism while respecting dependencies.
+Execute the implementation plan using an agent team. Maximize parallelism while respecting dependencies. Teammates coordinate directly with each other.
 
 ## Process
 
 ### 1. Read the Plan
 
 - Load the plan document provided as input
-- If the plan references sub-plans (large multi-phase plans), **implement only the current phase**—do not attempt all phases at once. Otherwise, your job is to make sure the entire thing is implemented.
-- Identify the dependency graph between tasks
+- If the plan references sub-plans (large multi-phase plans), **implement only the current phase**
+- Extract the task list, dependency graph, and integration points
 
-### 2. Execute with Parallel Agents
+### 2. Assess Scale
+
+- **Small plans** (1-3 independent tasks): Use Task subagents directly—team overhead isn't worth it
+- **Medium+ plans** (4+ tasks, dependencies, or shared interfaces): Create an agent team
+
+For small plans, delegate with Task tool using `devcore:teammate` and skip to Phase Completion.
+
+### 3. Create Team and Task List
+
+Create an agent team via `TeamCreate`. Then populate the shared task list:
+
+- `TaskCreate` for each task from the plan
+- Set `addBlockedBy` to express dependencies between tasks
+- Include in each task description:
+  - The specific work from the plan
+  - Paths to relevant context documents (`.claude/context/`, spec, plan)
+  - File ownership boundaries (which files this task owns)
+  - Integration points with other tasks (shared types, interfaces, APIs)
+  - Constraint: do not run tests or typechecks—other teammates may be mid-edit
+
+### 4. Spawn Teammates
+
+Spawn teammates via the Task tool with `team_name` set:
 
 **Delegation strategy:**
-- Use `devcore:programmer` for implementation tasks (default)
-- Use `devcore:junior-engineer` for trivial, repetitive changes (renames, migrations, obvious implementations)
+- `devcore:teammate` (opus) — all teammates. They delegate internally to sonnet/haiku subagents for subtasks.
 
-**Dependency management:**
-- Launch all tasks with no dependencies immediately (parallel batch)
-- As each agent completes, check what dependent tasks are now unblocked
-- Launch newly unblocked tasks immediately—don't wait for the entire batch
-- Continue until all tasks in the current phase are complete
+**Teammate prompts should include:**
+- Their role and which tasks to claim from the shared task list
+- The plan path and relevant context paths
+- Instruction to use `TaskList` → `TaskUpdate` (claim) → implement → `TaskUpdate` (complete) → `TaskList` (next) loop
+- Instruction to message teammates directly when finishing work on a shared interface or discovering something that affects another task
+- Instruction to message you (the lead) if blocked
 
-**Agent prompts should include:**
-- The specific task from the plan
-- Relevant context document paths (from `.claude/context/`, etc)
-- Any constraints or patterns to follow
-- Clear success criteria
+**Teammate count:** Scale to the parallelizable work. Don't spawn more teammates than there are independent task groups. 2-4 teammates is typical.
 
-Note: agents should usually not run tests or try to validate changes—other agents may be running, and one agent that runs typechecks may falsely find errors from unrelated code.
+### 5. Coordinate
 
-### 3. Monitor Progress
+Stay in a coordination role—do not implement tasks yourself.
 
-- Track which agents are running and which have completed
-- Surface any agent failures or blockers immediately
-- If an agent reports a blocker, assess whether to:
-  - Resolve the blocker and re-run
-  - Adjust the approach
-  - Escalate to the user
+- Respond to teammate messages (blockers, questions, integration issues)
+- When teammates report blockers, assess: resolve yourself, adjust the plan, or escalate to user
+- If a teammate finishes all their tasks and others remain unclaimed, direct them to pick up more
+- Surface progress to the user periodically
 
-### 4. Phase Completion
+### 6. Shutdown and Phase Completion
 
-When all tasks in the current phase are complete:
+When all tasks in the shared task list are complete:
+
+1. Send `shutdown_request` to each teammate
+2. Wait for shutdown confirmations
+3. Clean up team with `TeamDelete`
 
 State: "Phase {N} implementation complete. Ready for code review or continue to next phase."
 
@@ -68,3 +88,4 @@ State: "Phase {N} implementation complete. Ready for code review or continue to 
 - For large plans, expect to run `/rpi:implement` multiple times (once per phase). Don't run it yourself—just do the first sub-plan, and tell the user to clear chat and run `/rpi:implement` again.
 - Keep the user informed of progress, especially for long-running implementations
 - The priority is excellent code. Completion of all work should never come at the cost of cut corners.
+- **File conflicts:** Structure task ownership so teammates don't edit the same files. If unavoidable, sequence those tasks with `addBlockedBy`.

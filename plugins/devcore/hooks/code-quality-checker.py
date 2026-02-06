@@ -144,8 +144,14 @@ def main():
     if tool_name not in ["Write", "Edit", "MultiEdit"]:
         sys.exit(0)
 
-    # Don't check the hook file itself (contains model name patterns as strings)
+    # Get file path early for exclusion checks
     file_path = tool_input.get("file_path", "")
+
+    # Skip temp directories
+    if any(d in file_path for d in ['/tmp/', '/private/tmp/', '/var/tmp/', '/temp/', '.tmp/']):
+        sys.exit(0)
+
+    # Don't check the hook file itself (contains model name patterns as strings)
     if "code-quality-checker.py" in file_path:
         sys.exit(0)
 

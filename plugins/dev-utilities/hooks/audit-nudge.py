@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 """
 Stop hook that suggests running /audit after substantial sessions.
-Fires once per stop sequence (stop_hook_active prevents re-fire).
+Uses a temp file keyed by session_id to fire at most once per threshold.
 """
 import json
+import os
 import re
 import sys
+import tempfile
+
+
+def get_state_path(session_id):
+    return os.path.join(tempfile.gettempdir(), f"audit-nudge-{session_id}.json")
+
+
+def load_state(path):
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except (IOError, FileNotFoundError, json.JSONDecodeError):
+        return {"last_nudge_edits": 0}
+
+
+def save_state(path, state):
+    with open(path, "w") as f:
+        json.dump(state, f)
 
 
 def main():
@@ -17,8 +36,9 @@ def main():
     if input_data.get("stop_hook_active", False):
         sys.exit(0)
 
+    session_id = input_data.get("session_id", "")
     transcript_path = input_data.get("transcript_path", "")
-    if not transcript_path:
+    if not transcript_path or not session_id:
         sys.exit(0)
 
     try:
@@ -81,12 +101,25 @@ def main():
     if audit_ran:
         sys.exit(0)
 
+    # Deduplication: check if we already nudged at this edit level
+    state_path = get_state_path(session_id)
+    state = load_state(state_path)
+    last_nudge_edits = state.get("last_nudge_edits", 0)
+
+    # Require 10+ new file edits since last nudge to re-trigger
+    edits_since_nudge = file_edits - last_nudge_edits
+    if last_nudge_edits > 0 and edits_since_nudge < 10:
+        sys.exit(0)
+
     backtrack_detected = any(count >= 3 for count in file_edit_counts.values())
     substantial = assistant_turns >= 8 and tool_calls >= 10 and file_edits >= 3
     corrections_detected = user_corrections >= 2
 
     if not substantial and not backtrack_detected and not corrections_detected:
         sys.exit(0)
+
+    # Record that we nudged at this edit count
+    save_state(state_path, {"last_nudge_edits": file_edits})
 
     reasons = []
     if substantial:
@@ -97,12 +130,14 @@ def main():
     if corrections_detected:
         reasons.append(f"{user_corrections} user corrections")
 
+    # Use decision: block to send the message to Claude as feedback
     output = {
-        "continue": True,
-        "systemMessage": (
-            f"Substantial session ({'; '.join(reasons)}). "
-            "Consider running /audit to capture failure modes and generate targeted fixes "
-            "(hooks, rules, CLAUDE.md updates) before context is lost."
+        "decision": "block",
+        "reason": (
+            f"Substantial session detected ({'; '.join(reasons)}). "
+            "Suggest to the user that they run /audit to capture failure modes "
+            "and propose targeted fixes before this session's context is lost. "
+            "Keep it to one sentence."
         ),
     }
     print(json.dumps(output))

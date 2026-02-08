@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+from datetime import datetime, timezone
 
 
 def get_state_path(session_id):
@@ -25,6 +26,35 @@ def load_state(path):
 def save_state(path, state):
     with open(path, "w") as f:
         json.dump(state, f)
+
+
+def get_audit_log_path():
+    """Return project-level .claude/audit-log.jsonl path."""
+    cwd = os.getcwd()
+    claude_dir = os.path.join(cwd, ".claude")
+    os.makedirs(claude_dir, exist_ok=True)
+    return os.path.join(claude_dir, "audit-log.jsonl")
+
+
+def append_audit_record(session_id, assistant_turns, tool_calls, file_edits,
+                        file_edit_counts, user_corrections, backtrack_files):
+    """Append a structured JSONL record to .claude/audit-log.jsonl."""
+    record = {
+        "session_id": session_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "assistant_turns": assistant_turns,
+        "tool_calls": tool_calls,
+        "file_edits": file_edits,
+        "file_edit_counts": file_edit_counts,
+        "user_corrections": user_corrections,
+        "backtrack_files": backtrack_files,
+    }
+    try:
+        log_path = get_audit_log_path()
+        with open(log_path, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except (IOError, OSError):
+        pass  # Best-effort — don't break the hook
 
 
 def main():
@@ -112,14 +142,29 @@ def main():
         sys.exit(0)
 
     backtrack_detected = any(count >= 3 for count in file_edit_counts.values())
-    substantial = assistant_turns >= 8 and tool_calls >= 10 and file_edits >= 3
+    substantial = assistant_turns >= 150 and file_edits >= 10
     corrections_detected = user_corrections >= 2
 
     if not substantial and not backtrack_detected and not corrections_detected:
         sys.exit(0)
 
+    # Append audit log (dedup: only if file_edits changed since last log)
+    last_log_edits = state.get("last_log_edits", 0)
+    if file_edits > last_log_edits:
+        backtrack_files = [f for f, c in file_edit_counts.items() if c >= 3]
+        append_audit_record(
+            session_id=session_id,
+            assistant_turns=assistant_turns,
+            tool_calls=tool_calls,
+            file_edits=file_edits,
+            file_edit_counts=file_edit_counts,
+            user_corrections=user_corrections,
+            backtrack_files=backtrack_files,
+        )
+        state["last_log_edits"] = file_edits
+
     # Record that we nudged at this edit count
-    save_state(state_path, {"last_nudge_edits": file_edits})
+    save_state(state_path, {**state, "last_nudge_edits": file_edits})
 
     reasons = []
     if substantial:
@@ -133,11 +178,11 @@ def main():
     # Use decision: block to send the message to Claude as feedback
     output = {
         "decision": "block",
+        "suppressOutput": True,
         "reason": (
-            f"Substantial session detected ({'; '.join(reasons)}). "
-            "Suggest to the user that they run /audit to capture failure modes "
-            "and propose targeted fixes before this session's context is lost. "
-            "Keep it to one sentence."
+            f"[audit-nudge] Substantial session ({'; '.join(reasons)}). "
+            "Consider running /audit before context is lost. "
+            "Ask user to confirm if unsure."
         ),
     }
     print(json.dumps(output))

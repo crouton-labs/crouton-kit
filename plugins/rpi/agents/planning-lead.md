@@ -69,3 +69,4 @@ Use `AskUserQuestion` when you hit genuine ambiguity that the spec doesn't resol
 Message the team lead with:
 - Master plan path (and sub-plan paths if any)
 - Test plan path (or note that tests were deemed unnecessary, with justification from test-planner)
+- Recommended teammate count and rationale (based on independent task groups and domain spread in the plan)

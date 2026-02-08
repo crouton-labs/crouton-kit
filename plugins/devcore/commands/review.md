@@ -76,8 +76,8 @@ Infer from context (first match wins):
 
 ### Team Scaling
 
-| Change Size | Tasks | Grouping |
-|-------------|-------|----------|
+| Change Size | Subagent tasks | Grouping |
+|-------------|----------------|----------|
 | Small (<10 files) | 3-4 | Grouped concerns |
 | Medium (10-25 files) | 6-8 | Split by concern or vertical |
 | Large (>25 files) | 8-12 | Vertical slices + cross-cutting opus tasks |

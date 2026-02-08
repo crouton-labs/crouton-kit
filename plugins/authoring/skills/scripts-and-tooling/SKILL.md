@@ -36,15 +36,52 @@ Scripts abstract away multi-step sequences, complex computation, and ceremony th
 
 ## Design Principles
 
-**Clear interface** — document args, flags, and expected output in `--help` and file header comments.
+**Self-documenting** — `--help` is the canonical source of truth, not external docs. Make it comprehensive enough that an agent never needs to look elsewhere. Add a comment block at the top of the script explaining purpose, assumptions, and usage.
 
-**Structured output** — emit JSON or parseable text when the agent will consume the output. Raw human-readable output is fine for notification scripts.
+**Every output is a prompt** — the agent's next action depends on your script's output. Design both success and failure output to guide the agent forward, not just report status.
 
-**Fail loudly** — `set -euo pipefail` for bash. Print clear error messages to stderr. Exit non-zero on failure.
+**Familiar interfaces** — model your CLI after tools the agent already knows. If it looks like `pytest`, `docker`, or `kubectl`, the agent can infer behavior without reading docs. Reuse conventions: `--dry-run`, `--format json`, `--verbose`.
 
 **Idempotent** — safe to run multiple times. Guard against duplicate operations.
 
 **No interactive input** — agents can't respond to prompts. Use flags/args/env vars instead.
+
+## Output Design
+
+Script output is the primary interface between your tool and the agent. A silent success or cryptic error is a dead end.
+
+**Success output** — confirm what happened, echo IDs/paths the agent needs next, suggest next steps:
+
+```
+# bad
+OK
+
+# good
+Created deployment deploy-a1b2c3d4 (env: staging, 3 services)
+
+Next:
+  Check status:  deploy status deploy-a1b2c3d4
+  View logs:     deploy logs deploy-a1b2c3d4
+  Roll back:     deploy rollback deploy-a1b2c3d4
+```
+
+**Error output** — three parts: what went wrong, how to fix it, what to do next:
+
+```
+# bad
+Error: connection refused
+
+# good
+ERROR: Cannot connect to database at localhost:5432 (connection refused)
+
+Fix: Ensure postgres is running:
+  brew services start postgresql
+  # or: docker start postgres-dev
+
+Then retry: ./migrate --target production
+```
+
+**Structured output** — emit JSON when the agent will consume the result programmatically. Raw human-readable text is fine for notification scripts or when the agent just needs to relay information to the user.
 
 ## Common Categories
 

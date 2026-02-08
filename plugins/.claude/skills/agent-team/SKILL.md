@@ -287,6 +287,18 @@ management, and input validation. The app uses JWT tokens stored in
 httpOnly cookies. Report any issues with severity ratings."
 ```
 
+### No agent verifies its own work
+
+After any agent claims "tests pass" or "implementation complete," a separate agent should independently confirm. Self-verification is unreliable — agents anchor on their own output. Structure teams so that the agent that builds is never the agent that validates.
+
+### Split by coupling, not by layer
+
+The default instinct is frontend/backend/tests agents. Resist it when the layers are tightly coupled — a backend change that requires frontend and test updates is easier to coordinate within one agent than across three. Split along natural seam lines where agents can work independently. If changes to one agent's work would require changes to another's, they should probably be one agent.
+
+### Token cost is the governing constraint
+
+Each teammate is a separate Claude session burning tokens independently. A 4-agent team on a complex task can easily cost 4× a single session. Start with 2-3 agents max. Use subagents for quick focused tasks. Don't swarm for things a single agent handles fine.
+
 ### Size tasks appropriately
 
 * **Too small**: coordination overhead exceeds the benefit

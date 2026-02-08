@@ -36,6 +36,17 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/audit-nudge.py",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "clear",

@@ -15,12 +15,12 @@ You are the team lead for a full feature development workflow: specification, pl
 1. `TeamCreate` a team (e.g., `rpi-{topic}`)
 2. Spawn an `rpi:spec-writer` teammate with the topic/description from the input
 3. Tell the user: **"Spec-writer is ready. Switch to them (Shift+Down) to design your feature spec. They'll notify me when it's done."**
-4. Wait for the spec-writer's completion message containing the spec path and scope assessment
+4. Wait for the spec-writer's completion message containing the spec path, pipeline state path, and scope assessment
 
 ## Phase 2: Planning
 
 1. Send `shutdown_request` to the spec-writer — it's done
-2. Spawn an `rpi:planning-lead` teammate. Provide: spec path, context doc paths (if any), scope assessment
+2. Spawn an `rpi:planning-lead` teammate. Provide: spec path, pipeline state path, context doc paths (if any), scope assessment
 3. The planning-lead works autonomously — creates plan, runs advisor review, validates
 4. Wait for its completion message containing the plan path and implementation structure
 5. Send `shutdown_request` to the planning-lead

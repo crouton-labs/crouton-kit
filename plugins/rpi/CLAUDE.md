@@ -97,6 +97,7 @@ The Stop hook in `hooks/` blocks session end if specs or plans were edited witho
 ├── plans/{topic}.tests.plan.md              # Test plan
 ├── plans/{topic}.validation.plan.md         # Validation plan (exit criteria, proof methods)
 ├── plans/{topic}-{phase}.plan.md            # Sub-plans (large features)
+├── pipeline/{topic}.state.md                 # Decision journal across phases
 ├── context/{topic}-{domain}.context.md      # Codebase context per domain
 ├── context/{topic}-{library}.docs.md        # Third-party library docs
 ├── scripts/                                 # Reusable validation scripts

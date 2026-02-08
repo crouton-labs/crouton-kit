@@ -32,9 +32,10 @@ Create a comprehensive, actionable implementation plan based on the feature spec
 
 ## Planning Approach
 
-1. **Review spec and context**
+1. **Review spec, context, and pipeline state**
    - Understand the required behavior from the spec
    - Review context docs for patterns, constraints, and integration points
+   - Check `.claude/pipeline/{topic}.state.md` if it exists — this contains the spec phase's investigation findings, rejected alternatives, and handoff notes. **Do not re-explore areas already covered there.**
    - Identify areas of complexity or risk
 
 2. **Determine plan complexity and strategy**
@@ -113,6 +114,27 @@ After revisions are complete, run `/rpi:review-plan {spec-path} {plan-path}` to 
 If validation fails, address the gaps and re-run validation.
 
 ## Output
+
+### Append to Pipeline State
+
+If `.claude/pipeline/{topic}.state.md` exists, append a Planning Phase section:
+
+```markdown
+## Planning Phase
+
+### Architectural Decisions
+- [Decision]: [Rationale — 1 line each]
+
+### Complexity Hotspots
+- [Area]: [Why it's risky or non-obvious]
+
+### Handoff Notes
+- [What the implementation phase needs beyond the plan itself]
+```
+
+Keep it terse. Only capture what's not already in the plan document.
+
+### Save Plan
 
 Save the master plan to the project's .claude directory at `.claude/plans/` with a descriptive name (e.g., `implement-auth-flow.plan.md`).
 

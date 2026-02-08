@@ -69,6 +69,29 @@ When the feature is well-defined, save to `{cwd}/.claude/specs/{topic-name}.spec
 
 ## After Saving the Spec
 
+### Save Pipeline State
+
+Save a decision journal to `.claude/pipeline/{topic}.state.md` capturing investigation byproducts that the spec doesn't include. This prevents the planning phase from re-exploring the same territory.
+
+```markdown
+# Pipeline State: {topic}
+
+## Specification Phase
+
+### Alternatives Considered
+- [Approach]: [Why chosen or rejected — 1 line each]
+
+### Key Discoveries
+- [Codebase patterns, constraints, or gotchas found during investigation that aren't in the spec]
+
+### Handoff Notes
+- [What the planning phase needs to know that doesn't fit the spec format]
+```
+
+Keep it terse — 10-20 bullet points total. This is a scratchpad, not a document.
+
+### Validate
+
 Run `/rpi:review-spec {spec-path}` to validate the spec.
 
 If validation fails, address the issues and re-run validation.

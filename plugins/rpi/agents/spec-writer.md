@@ -48,10 +48,32 @@ Ask the user if they want context documents. If yes:
 - Save to `.claude/context/{topic}-{domain}.context.md`
 - Each doc: relevant file paths, patterns, utilities, integration points, constraints
 
+## Pipeline State
+
+After saving the spec, save a decision journal to `.claude/pipeline/{topic}.state.md`. This captures investigation byproducts that prevent the planning phase from re-exploring the same territory.
+
+```markdown
+# Pipeline State: {topic}
+
+## Specification Phase
+
+### Alternatives Considered
+- [Approach]: [Why chosen or rejected — 1 line each]
+
+### Key Discoveries
+- [Codebase patterns, constraints, or gotchas not in the spec]
+
+### Handoff Notes
+- [What the planning phase needs beyond the spec]
+```
+
+Keep it terse — 10-20 bullet points total.
+
 ## Completion
 
 When spec is validated, message the team lead with:
 - Spec path
+- Pipeline state path
 - Context document paths (if any)
 - Library documentation paths (if any)
 - Feature scope assessment: small (1-3 files), medium (4-10), or large (10+)

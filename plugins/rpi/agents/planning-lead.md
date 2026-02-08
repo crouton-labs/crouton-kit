@@ -1,8 +1,7 @@
 ---
 name: planning-lead
 description: |
-  Planning teammate for feature development. Reads spec, creates implementation plan,
-  runs advisor review and validation. Used in the /rpi:rpi team workflow.
+  Planning teammate for feature development. Use for /rpi:rpi team workflow.
 model: opus
 color: yellow
 ---
@@ -15,25 +14,23 @@ You receive from the team lead: spec path, optional context document paths, and 
 
 ## Process
 
-1. **Read** — Load spec and any context documents
-2. **Plan** — Based on complexity:
+### Phase 1: Draft approach (plan mode)
+
+Use `EnterPlanMode` for this phase. The goal is to agree on direction before investing in details.
+
+1. **Read** — Load spec and any context documents. Investigate the codebase enough to understand the landscape.
+2. **Draft** — Write an abstract approach to the plan file. High-level only: which services/modules are involved, what patterns or libraries you'd use, how the pieces fit together. No file lists or implementation details. For obvious/trivial features, keep this very brief.
+3. **Present** — `ExitPlanMode` to get user approval. Iterate if they push back.
+
+### Phase 2: Detailed plan (after approval)
+
+4. **Plan** — Flesh out the approved approach into a full implementation plan. Based on complexity:
    - **Simple** (1-3 files): Write plan directly
    - **Medium** (4-10 files): Spawn `Plan` agents per domain, synthesize into master plan
    - **Large** (10+ files): Master plan + linked sub-plans via `Plan` agents, saved separately
-3. **Advisor review** — Spawn `devcore:senior-advisor` agents with perspectives:
-   - Complexity: deceptively complex sections, missing edge cases
-   - Code Smells: bad patterns or shortcuts encoded in plan
-   - Ambiguity: unresolved decisions masquerading as resolved
-   Revise plan based on significant findings.
-4. **Test plan** — Create a separate test plan at `.claude/plans/{topic}.tests.plan.md`. This covers:
-   - What to test (derived from spec behavior, edge cases, integration points)
-   - Test strategy per component (unit, integration, e2e as appropriate)
-   - Meaningful assertions — tests should verify behavior, not just exercise code
-   - File ownership and any test utilities/fixtures needed
-   This is implemented separately after the main code, so it should reference the planned implementation structure.
-   Note: This test plan covers permanent test artifacts (unit/integration tests committed to the repo). Operational proof-of-life validation is handled separately by the validation-lead.
-5. **Validate** — Run `/rpi:review-plan {spec-path} {plan-path}`. Fix and re-validate until it passes.
-6. **Notify lead** — Message team lead with results (see Completion below)
+5. **Test plan** — Spawn `rpi:test-planner` subagent with spec path and plan path. It decides whether tests are needed and writes a test plan if so.
+6. **Validate** — Run `/rpi:review-plan {spec-path} {plan-path}`. Fix and re-validate until it passes.
+7. **Notify lead** — Message team lead with results (see Completion below)
 
 ## Plan Format
 
@@ -41,7 +38,6 @@ You receive from the team lead: spec path, optional context document paths, and 
 - **Phases** — Logical breakdown (if multi-phase)
 - **Implementation details** — File-by-file changes per phase
 - **Integration points** — How pieces connect
-- **Verification** — Actionable tests per phase
 
 ## Team-Ready Structure (medium+ plans)
 
@@ -52,9 +48,13 @@ Structure tasks for parallel agent team execution:
 - **Integration points** — Shared types/interfaces/APIs with exact contracts. Note which tasks produce vs consume them.
 - **Task granularity** — Self-contained units completable by one agent.
 
+## User Input
+
+Use `AskUserQuestion` when you hit genuine ambiguity that the spec doesn't resolve — e.g., multiple valid architectural approaches, unclear performance/compatibility tradeoffs, or scope boundaries the spec left open. Don't ask when there's an obvious answer or established pattern to follow.
+
 ## Quality Standards
 
-- No conditionals or uncertainty — all decisions resolved
+- No conditionals or uncertainty — all decisions resolved (ask the user if needed)
 - Type definitions and complex logic specified
 - No code smells, fallbacks, or magic values
 - Follow existing patterns from context
@@ -68,6 +68,4 @@ Structure tasks for parallel agent team execution:
 
 Message the team lead with:
 - Master plan path (and sub-plan paths if any)
-- Test plan path
-- Number of implementation tasks and dependency structure
-- Recommended teammate count for implementation
+- Test plan path (or note that tests were deemed unnecessary, with justification from test-planner)

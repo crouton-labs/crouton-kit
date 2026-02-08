@@ -26,10 +26,20 @@ Execute the implementation plan using an agent team. Maximize parallelism while 
 - If the plan references sub-plans (large multi-phase plans), **implement only the current phase**
 - Extract the task list, dependency graph, and integration points
 
-### 2. Assess Scale
+### 2. Assess Scale & Teammate Count
 
-- **Small plans** (1-3 independent tasks): Use Task subagents directly—team overhead isn't worth it
-- **Medium+ plans** (4+ tasks, dependencies, or shared interfaces): Create an agent team
+Count the plan's independent task groups (tasks with no mutual dependencies that can run in parallel).
+
+| Independent groups | Files touched | Strategy |
+|-------------------|---------------|----------|
+| 1-3               | 1-5           | Task subagents directly — no team overhead |
+| 2-4               | 5-15          | Agent team with **2 teammates** |
+| 4-8               | 10-30         | Agent team with **3 teammates** |
+| 8+                | 25+           | Agent team with **4 teammates** (cap) |
+
+Use the higher of the two columns to pick the tier. Never spawn more teammates than independent task groups.
+
+**Scale-up signals** (bump one tier): shared interfaces requiring tight coordination, multiple languages/frameworks, or changes spanning both infrastructure and application layers.
 
 For small plans, delegate with Task tool using `devcore:teammate` and skip to Phase Completion.
 
@@ -60,7 +70,7 @@ Spawn teammates via the Task tool with `team_name` set:
 - Instruction to message teammates directly when finishing work on a shared interface or discovering something that affects another task
 - Instruction to message you (the lead) if blocked
 
-**Teammate count:** Scale to the parallelizable work. Don't spawn more teammates than there are independent task groups. 2-4 teammates is typical.
+**Teammate count:** Use the count from Assess Scale above.
 
 ### 5. Coordinate
 

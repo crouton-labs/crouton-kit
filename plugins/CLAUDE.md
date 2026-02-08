@@ -88,17 +88,6 @@ Without this registration, the plugin won't be discovered by Claude Code even if
 | `debugging` | `/debug` and `/investigate-fix` commands |
 | `knowledge-capture` | `/interview`, `/learn`, `/collaborate` |
 
-## Issue Tracking (bd/beads)
-
-**IMPORTANT**: Use `bd` (beads) for ALL issue tracking. No markdown TODOs.
-
-```bash
-bd ready              # Show unblocked work
-bd create "Title" -t task -p 2   # Create issue (priority 0-4)
-bd update <id> --status in_progress
-bd close <id>
-bd sync               # Push to git
-```
 
 Types: `bug`, `feature`, `task`, `epic`, `chore`
 Priorities: 0=critical, 1=high, 2=medium, 3=low, 4=backlog

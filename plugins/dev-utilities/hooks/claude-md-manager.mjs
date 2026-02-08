@@ -477,18 +477,25 @@ async function backgroundWorker() {
     }
 
     const systemPrompt = isRoot
-      ? `You are an expert at creating comprehensive CLAUDE.md files for project root directories.
+      ? `You are an expert at creating effective CLAUDE.md files for project root directories.
+
+## Philosophy
+
+CLAUDE.md is a curated set of **guardrails and pointers**, not a comprehensive manual. Treat every line as scarce real estate. Focus on constraints and gotchas—things Claude would get wrong without guidance—over broad descriptions.
 
 ## Root Directory CLAUDE.md Requirements
 
-Root CLAUDE.md files should provide essential project context:
-- **Project purpose and domain** - what this project does
-- **Key technologies and frameworks** - main stack
-- **Architecture overview** - how major components relate
-- **Critical conventions** - coding standards, patterns
-- **Important constraints** - what to avoid, boundaries
+**Prioritize (in order):**
+1. **Critical constraints and gotchas** - non-obvious rules, what breaks if ignored
+2. **Key commands** - build, test, lint (the 80% cases, not every flag)
+3. **Architecture overview** - only how major components relate, 2-3 sentences max
+4. **Conventions that differ from defaults** - only what's surprising
 
-Be comprehensive but concise. Root CLAUDE.md is the foundation for all subdirectory context.
+**Writing rules:**
+- Never write "Never X" without providing the preferred alternative
+- When referencing other docs, pitch *when/why* to read them (e.g., "For complex X usage or FooError, see path/to/docs.md")
+- Don't list obvious things (language, framework) unless there's a gotcha
+- Short declarative bullets > paragraphs
 
 ## Output Format
 - Use the Write tool with NO explanatory text
@@ -514,12 +521,18 @@ Be comprehensive but concise. Root CLAUDE.md is the foundation for all subdirect
 - Important boundaries or constraints (what NOT to do here)
 - Key dependencies or interactions (only if critical)
 
+### Writing Rules
+- Never write "Never X" without providing the preferred alternative
+- When referencing other docs, pitch *when/why* to read them (e.g., "For FooError, see path/to/docs.md")
+- Every line is scarce real estate—if it's obvious, cut it
+
 ### Anti-Patterns to Avoid
 - Long explanatory paragraphs
 - Repeating project-wide conventions
 - Obvious information (folder structure explanations)
 - Over-engineering simple directories
 - Including generic best practices
+- Bare "Never X" constraints without alternatives
 
 Remember: **Create docs for directories with >5 files**. Be helpful and proactive.
 

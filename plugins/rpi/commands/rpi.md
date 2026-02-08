@@ -42,7 +42,8 @@ Read the plan and build the team:
    - Constraint in every task: do not run tests or typechecks (other teammates may be mid-edit)
 
 2. Spawn `devcore:teammate` teammates with `team_name`:
-   - Scale to parallelizable work — use the planning-lead's recommendation, typically 2-4
+   - Use the planning-lead's recommended teammate count from their completion message
+   - If no recommendation: count independent task groups — 2 for ≤4 groups, 3 for 5-8, 4 for 8+
    - Teammates delegate internally to sonnet/haiku subagents for subtasks
 
 3. Each teammate's prompt: claim tasks from shared list via `TaskList` → `TaskUpdate` (claim) → implement → `TaskUpdate` (complete) → `TaskList` (next). Message teammates directly when finishing shared interfaces. Message lead if blocked.

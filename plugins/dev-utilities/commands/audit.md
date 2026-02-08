@@ -33,7 +33,29 @@ If the log file doesn't exist or is empty, say so and suggest running a few sess
 
 ## Session Audit Mode (default, no argument)
 
-Review this conversation from start to finish. Identify every point where you:
+### Step 1: Assess
+
+Review this conversation and make a honest judgment: **did the session have actual failures?**
+
+A failure is a moment where you concretely went wrong — took a wrong path, wasted significant tokens, backtracked, made an incorrect assumption, or were misled. A clean session with no failures is a normal, common outcome. If the session was clean, say so in 1-3 sentences and stop. Do not continue to Step 2.
+
+**These are NOT failures:**
+- Codebase improvements you noticed along the way
+- Documentation that *could* be better but didn't actually cause a problem
+- Hypothetical future issues that didn't manifest in this session
+- Things that went fine but could theoretically go faster
+
+### Step 2: Enumerate failures (only if Step 1 found issues)
+
+For each failure, all three fields are required:
+
+1. **What happened** — cite the specific moment. What did you do, and what went wrong? If you cannot point to a concrete action and its bad outcome, it is not a finding.
+2. **Root cause** — which failure mode category applies (see reference below)
+3. **Proposed fix** — specific fix with fix type (see reference below)
+
+Prioritize by: (frequency x severity). Recurring issues that waste significant tokens rank highest. Skip one-off missteps, issues already fixed mid-session, or findings where the fix is "no action."
+
+#### Failure mode reference
 - Went down a wrong path, wasted tokens, or had to backtrack
 - Made incorrect assumptions instead of reading code
 - Were misled by documentation, rules, CLAUDE.md files, or tool output
@@ -42,8 +64,6 @@ Review this conversation from start to finish. Identify every point where you:
 - Lacked context that would have prevented a mistake
 - Received conflicting guidance from different sources
 - Over-engineered or under-delivered due to unclear requirements
-
-Also consider these less obvious failure modes:
 - **Context pollution**: too much irrelevant context loaded, drowning useful signal
 - **Stale docs**: CLAUDE.md or rules describing outdated behavior
 - **Hidden side effects**: functions doing more than their names suggest
@@ -52,32 +72,23 @@ Also consider these less obvious failure modes:
 - **Repeated manual ceremony**: multi-step sequences that should be scripted
 - **Wrong search strategy**: grepped when should have globbed, read wrong files, rabbit-holed
 
-For each issue found, state:
-1. What happened (1-2 sentences)
-2. Root cause / failure mode category
-3. Proposed fix and fix type
+#### Fix type reference
 
-## Available Fix Types
+Don't default to docs for everything — there are stronger options.
 
-Consider these tools when proposing solutions. Don't default to docs for everything — there are stronger options.
-
-- **Hooks** — deterministic handlers at lifecycle events. Can block dangerous operations, inject context before/after tool use, auto-format code after edits, enforce quality gates before stopping, auto-approve safe operations, modify tool inputs transparently, trigger notifications, log actions for auditing, coordinate agent teams, and more. Unlike instructions, these **cannot be ignored**. Use the `hooks` skill for the full pattern reference.
-- **Rules** (`.claude/rules/*.md`) — auto-loaded constraints, optionally scoped to file patterns via `paths` frontmatter. Lighter than hooks, heavier than CLAUDE.md. Use the `rules-authoring` skill for guidance.
-- **CLAUDE.md updates** — universal project context loaded every session. Every line is scarce real estate; propose pruning alongside additions. Use the `claude-md-authoring` skill for best practices.
-- **Scripts/tools** (`bin/` executables, MCP servers) — abstract away repeated multi-step sequences, complex computation, environment setup, git workflows, API interactions, code scaffolding, deployment pipelines. Deterministic, token-efficient, composable across hooks/commands/CI. Use the `scripts-and-tooling` skill for design guidance.
-- **Skills** (`.claude/skills/`) — on-demand reference material loaded when relevant, not every session. Better than CLAUDE.md for domain knowledge that's detailed but not always needed. Use the `skills-authoring` skill.
-- **Commands** — reusable prompts that set mode and constraints for specific workflows. Use the `commands-authoring` skill.
-- **Refactoring** — when the code itself is the problem (naming, layout, duplication, size, abstraction, smells).
+- **Hooks** — deterministic lifecycle handlers. Unlike instructions, these **cannot be ignored**. Use the `hooks` skill.
+- **Rules** (`.claude/rules/*.md`) — auto-loaded constraints, optionally scoped via `paths` frontmatter. Use the `rules-authoring` skill.
+- **CLAUDE.md updates** — universal project context. Every line is scarce real estate; propose pruning alongside additions. If >5 lines of domain knowledge, suggest a skill instead. Use the `claude-md-authoring` skill.
+- **Scripts/tools** (`bin/`, MCP servers) — abstract repeated multi-step sequences. Use the `scripts-and-tooling` skill.
+- **Skills** (`.claude/skills/`) — on-demand reference, not loaded every session. Use the `skills-authoring` skill.
+- **Commands** — reusable prompts for specific workflows. Use the `commands-authoring` skill.
+- **Refactoring** — when the code itself is the problem.
 - **Bug fixes** — when tools/scripts are broken or misdocumented.
 
 ## Constraints
 
 - **Report only.** Present findings, then ask before implementing anything.
-- **Never auto-modify** CLAUDE.md files, rules, skills, agent prompts, or hooks. These are high-leverage artifacts where bad edits compound. Always show proposed content for review first.
-- When proposing CLAUDE.md changes: every line is scarce real estate. Propose pruning alongside additions. If content is >5 lines of domain knowledge, suggest a skill instead.
-- When proposing hooks: specify the event, matcher, and what the hook should do—but confirm before writing code.
+- **Never auto-modify** CLAUDE.md files, rules, skills, agent prompts, or hooks. Always show proposed content for review first.
+- When proposing hooks: specify the event, matcher, and behavior — confirm before writing code.
 - When proposing scripts: describe the interface (args, behavior) before implementing.
-- Prioritize by: (frequency × severity). Recurring issues that waste significant tokens rank highest.
-- **Skip low-value findings.** Don't report one-off missteps, issues already fixed during the session, or things where the proposed fix is "no action." If it's not worth changing something to prevent, it's not worth reporting.
 - Be honest about issues that aren't fixable (inherent model limitations, genuinely ambiguous requirements).
-- If nothing actionable went wrong, say so. Don't manufacture issues.

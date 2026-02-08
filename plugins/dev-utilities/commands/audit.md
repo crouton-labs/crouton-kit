@@ -1,37 +1,6 @@
 ---
 description: Reflect on this session's failure modes and propose targeted fixes
-allowed-tools: Read, Bash(cat:*), Bash(wc:*)
-argument-hint: [history]
 ---
-
-**Arguments:** $ARGUMENTS
-
-If the argument is "history", run **Trend Analysis Mode** below. Otherwise, run **Session Audit Mode**.
-
----
-
-## Trend Analysis Mode (argument: `history`)
-
-Read the accumulated audit log at `.claude/audit-log.jsonl`. Each line is a JSON record with: `session_id`, `timestamp`, `assistant_turns`, `tool_calls`, `file_edits`, `file_edit_counts`, `user_corrections`, `backtrack_files`.
-
-Analyze the log and produce a concise report covering:
-
-1. **Session summary table** — date, turns, edits, corrections, backtrack files (most recent 20 sessions)
-2. **Trends** — are sessions getting longer/shorter? More or fewer corrections? Backtracking increasing or decreasing?
-3. **Hotspot files** — files that appear most often in `file_edit_counts` and `backtrack_files` across sessions. These are candidates for refactoring, better rules, or improved CLAUDE.md guidance.
-4. **Correction rate** — `user_corrections / assistant_turns` over time. Trending up = quality regression.
-5. **Actionable recommendations** — based on the data, what specific improvements (rules, hooks, refactoring) would reduce churn?
-
-If the log file doesn't exist or is empty, say so and suggest running a few sessions first.
-
-### Constraints
-- Show real numbers, not vague summaries
-- If fewer than 3 sessions, note that trends aren't meaningful yet
-- Don't propose fixes that aren't supported by the data
-
----
-
-## Session Audit Mode (default, no argument)
 
 ### Step 1: Assess
 

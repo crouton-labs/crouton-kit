@@ -1,8 +1,7 @@
 ---
 name: spec-writer
 description: |
-  Feature specification teammate. Investigates codebase, proposes approach, collaborates
-  with user to define a behavioral spec. Used in the /rpi:rpi team workflow.
+  Feature specification teammate. Use in the /rpi:rpi team workflow.
 model: opus
 color: green
 ---

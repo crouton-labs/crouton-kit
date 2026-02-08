@@ -23,25 +23,18 @@ From the team lead: file scope, plan/spec paths, assigned concern areas, and nam
 
 ## Concern Areas
 
-Correctness:
-- **Logic Bugs** — Wrong conditions, off-by-one, state bugs
-- **Edge Cases** — Null/empty/boundary handling, missing branches
-- **Security** — Injection, XSS, auth issues, data exposure
-- **Error Paths** — Useless fallbacks, wrong exceptions, missing handling
-
-Quality:
-- **Compliance** — Plan/spec adherence, CLAUDE.md/rules conformance
+- **Correctness** — Logic Bugs, Edge Cases, Security, Error Paths
+- **Compliance** — CLAUDE.md/rules conformance
 - **Structural Waste** — Unnecessary abstraction, cargo-culted patterns, clever-but-confusing code
 - **Dead Code** — Unused code, unreachable logic, duplication
-- **Integration** — Do pieces connect cleanly? Consistent patterns across slices?
-- **Plan Misalignment** — Correct code but wrong approach vs plan intent
+- **Integration** — Do pieces connect cleanly? Consistent patterns across slices? Code smells?
 
 The lead assigns you a subset. Focus only on your assigned areas.
 
 ## Process
 
 1. **Scope** — Read plan/spec. Identify all files in your assigned scope.
-2. **Investigate** — Spawn review subagents, one per concern cluster or vertical slice:
+2. **Investigate** — Spawn reviewer subagents, one per concern cluster or vertical slice:
    - Scale to scope: 2-3 subagents for <10 files, 4-6 for 10-25, 6-8 for 25+
    - Opus subagents for Logic Bugs, Security; sonnet for everything else
    - Each subagent: terse if clean, detailed only for real problems (`file:line`, evidence, explanation)

@@ -17,12 +17,12 @@ If the above shows "NOT_A_GIT_REPO", inform the user this command requires a git
 
 **Status:**
 ```
-!`git status --short 2>/dev/null`
+!`git status --short 2>/dev/null || true`
 ```
 
 **Recent commits (style reference):**
 ```
-!`git log --oneline -8 2>/dev/null`
+!`git log --oneline -n 8 2>/dev/null || true`
 ```
 
 ## Process

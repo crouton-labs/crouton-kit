@@ -20,6 +20,8 @@ Hookify installs generic hooks that run on these events:
 - **PostToolUse**: After a tool executes
 - **Stop**: When Claude wants to stop working
 - **UserPromptSubmit**: When user submits a prompt
+- **TeammateIdle**: When a teammate is about to go idle
+- **TaskCompleted**: When a task is marked complete
 
 These hooks read configuration files from `.claude/hookify.*.local.md` and check if any rules match the current operation.
 
@@ -47,7 +49,7 @@ This command could delete important files. Please verify the path.
 **Key fields:**
 - `name`: Unique identifier for the rule
 - `enabled`: true/false to activate/deactivate
-- `event`: bash, file, stop, prompt, or all
+- `event`: bash, file, stop, prompt, teammate_idle, task_completed, or all
 - `pattern`: Regex pattern to match
 
 The message body is what Claude sees when the rule triggers.

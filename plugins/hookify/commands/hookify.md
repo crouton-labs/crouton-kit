@@ -95,7 +95,7 @@ For each confirmed behavior, create a `.claude/hookify.{rule-name}.local.md` fil
 ---
 name: {rule-name}
 enabled: true
-event: {bash|file|stop|prompt|all}
+event: {bash|file|stop|prompt|teammate_idle|task_completed|all}
 pattern: {regex pattern}
 action: {warn|block}
 ---
@@ -163,6 +163,8 @@ Use the current working directory (where Claude Code was started) as the base pa
 - **file**: Matches Edit, Write, MultiEdit tools
 - **stop**: Matches when agent wants to stop (use for completion checks)
 - **prompt**: Matches when user submits prompts
+- **teammate_idle**: Matches when a teammate is about to go idle (use for enforcing work completion)
+- **task_completed**: Matches when a task is marked complete (use for verification gates)
 - **all**: Matches all events
 
 ## Pattern Writing Tips

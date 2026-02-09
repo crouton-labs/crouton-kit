@@ -4,7 +4,7 @@ Prevent unwanted behaviors through lifecycle hooks that check markdown-defined r
 
 ## How It Works
 
-Hookify installs lifecycle hooks (`PreToolUse`, `PostToolUse`, `Stop`, `UserPromptSubmit`) that evaluate rules stored in markdown files. Rules define patterns to match and actions to take (warn or block).
+Hookify installs lifecycle hooks (`PreToolUse`, `PostToolUse`, `Stop`, `UserPromptSubmit`, `TeammateIdle`, `TaskCompleted`) that evaluate rules stored in markdown files. Rules define patterns to match and actions to take (warn or block).
 
 **Rules are discovered by walking up from CWD to home directory:**
 1. `.claude/hookify.*.local.md` (current directory and all parents)
@@ -98,7 +98,7 @@ The `diff` field contains a unified diff format where:
 |-------|----------|--------|-------------|
 | `name` | Yes | kebab-case string | Unique identifier (e.g., `warn-dangerous-rm`) |
 | `enabled` | Yes | `true` \| `false` | Whether rule is active |
-| `event` | Yes | `bash` \| `file` \| `diff` \| `stop` \| `prompt` \| `all` | Which lifecycle events to match |
+| `event` | Yes | `bash` \| `file` \| `diff` \| `stop` \| `prompt` \| `teammate_idle` \| `task_completed` \| `all` | Which lifecycle events to match |
 | `action` | No | `warn` \| `block` | Default: `warn`. Block prevents operation |
 | `pattern` | No | regex string | Simple pattern for single-condition rules |
 | `conditions` | No | array | Complex multi-condition rules (see below) |
@@ -127,6 +127,8 @@ conditions:
 | `diff` | Edit tool | `diff`, `file_path`, `old_string`, `new_string` | Match changes in unified diff format (`+added`, `-removed`) |
 | `stop` | Agent attempts to stop | `reason`, `transcript` | Require tests before completion |
 | `prompt` | User submits prompt | `prompt` | Context injection based on user input |
+| `teammate_idle` | Teammate about to go idle | `content` | Force continuation until artifacts produced |
+| `task_completed` | Task marked complete | `content` | Gate completion with verification checks |
 | `all` | All events | Field depends on tool | Cross-cutting concerns |
 
 ## Condition Structure
@@ -157,6 +159,8 @@ conditions:
 | `diff` | `diff` | `diff`, `file_path`, `old_string`, `new_string` |
 | `prompt` | `prompt` | `prompt` |
 | `stop` | `content` | `reason`, `transcript` |
+| `teammate_idle` | `content` | `content` |
+| `task_completed` | `content` | `content` |
 | `all` | `content` | Context-dependent |
 
 ## Actions
@@ -237,6 +241,8 @@ Hookify uses these Claude Code lifecycle hooks:
 - **PostToolUse**: Shows matching `action: warn` rules after tool execution
 - **Stop**: Evaluates `event: stop` rules when agent attempts to stop
 - **UserPromptSubmit**: Injects context from `event: prompt` rules
+- **TeammateIdle**: Evaluates `event: teammate_idle` rules when a teammate is about to idle
+- **TaskCompleted**: Evaluates `event: task_completed` rules when a task is marked complete
 
 Each hook script (`hooks/*.py`) loads rules matching the event type and evaluates them against input data using regex patterns or condition operators.
 

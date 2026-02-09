@@ -4,10 +4,15 @@ Claude Code lifecycle hooks that execute at specific session and tool events.
 
 ## Hook Types (hooks.json)
 
-- **Notification** - Fires on file notifications (e.g., success sounds)
+- **SessionStart** - When session starts (matched on `clear`, `resume`, `compact`)
+- **UserPromptSubmit** - When user submits a prompt
 - **PreToolUse** - Before Write/Edit/MultiEdit/NotebookEdit tools execute
 - **PostToolUse** - After Bash tool execution
-- **SessionStart** - When session starts (matched on `clear` command)
+- **Stop** - When Claude finishes responding
+- **SubagentStart/SubagentStop** - Subagent lifecycle
+- **TeammateIdle** - Teammate about to idle (can force continuation)
+- **TaskCompleted** - Task marked complete (can reject)
+- **Notification** - Fires on file notifications (e.g., success sounds)
 - **SessionEnd** - When session ends
 
 ## Hook Implementations

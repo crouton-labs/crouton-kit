@@ -118,6 +118,8 @@ class Rule:
                 cond_field = 'diff'
             elif event == 'prompt':
                 cond_field = 'prompt'
+            elif event in ('teammate_idle', 'task_completed'):
+                cond_field = 'content'
             else:
                 cond_field = 'content'
 
@@ -324,7 +326,7 @@ def evaluate_rules(rules: List[Rule], input_data: Dict[str, Any], only_warnings:
         messages = [f"**[{r.name}]**\n{interpolate_commands(r.message)}" for r in blocking_rules]
         combined = "\n\n".join(messages)
 
-        if hook_event == 'Stop':
+        if hook_event in ('Stop', 'TeammateIdle', 'TaskCompleted'):
             return {"decision": "block", "reason": combined}
         elif hook_event in ['PreToolUse', 'PostToolUse']:
             return {

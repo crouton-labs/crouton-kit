@@ -14,6 +14,8 @@ Each hook receives JSON from stdin, processes it, and exits with status code:
 | PostToolUse | After tool completes | Show warnings (exit 2 to display stderr as message) |
 | Stop | When agent stops | Cleanup, final checks |
 | UserPromptSubmit | User submits prompt | Pre-submission validation |
+| TeammateIdle | Teammate about to idle | Force continuation until artifacts produced |
+| TaskCompleted | Task marked complete | Gate completion with verification |
 
 ## Implementation Pattern
 

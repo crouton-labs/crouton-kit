@@ -89,5 +89,13 @@ Without this registration, the plugin won't be discovered by Claude Code even if
 | `knowledge-capture` | `/interview`, `/learn`, `/collaborate` |
 
 
+## Known Upstream Issues
+
+Plugin cache/update bugs that affect marketplace distribution:
+
+- [#16866 - Plugin marketplace cache not updated before install/update](https://github.com/anthropics/claude-code/issues/16866)
+- [#17361 - Plugin cache never refreshes - autoUpdate doesn't update what Claude reads](https://github.com/anthropics/claude-code/issues/17361)
+- [#21205 - Marketplace plugin updates accumulate git history instead of staying shallow](https://github.com/anthropics/claude-code/issues/21205)
+
 Types: `bug`, `feature`, `task`, `epic`, `chore`
 Priorities: 0=critical, 1=high, 2=medium, 3=low, 4=backlog

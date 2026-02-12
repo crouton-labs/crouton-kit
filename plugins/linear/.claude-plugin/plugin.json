@@ -1,0 +1,5 @@
+{
+  "name": "linear",
+  "version": "1.0.0",
+  "description": "Linear CLI integration — context injection, skill reference, and issue management commands"
+}

@@ -97,6 +97,17 @@
       ]
     },
     {
+      "name": "linear",
+      "source": "./plugins/linear",
+      "description": "Linear CLI integration — context injection, skill reference, and issue management",
+      "version": "1.0.0",
+      "keywords": [
+        "linear",
+        "issues",
+        "project-management"
+      ]
+    },
+    {
       "name": "authoring",
       "source": "./plugins/authoring",
       "description": "Guides for authoring Claude Code artifacts — CLAUDE.md, hooks, rules, skills, commands, and scripts",

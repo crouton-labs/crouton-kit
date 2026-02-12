@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/linear-context.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

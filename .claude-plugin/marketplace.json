@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "crouton-kit",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "owner": {
     "name": "Silas Rhyneer",
     "email": "silas@example.com"
@@ -100,7 +100,7 @@
       "name": "linear",
       "source": "./plugins/linear",
       "description": "Linear CLI integration — context injection, skill reference, and issue management",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "keywords": [
         "linear",
         "issues",

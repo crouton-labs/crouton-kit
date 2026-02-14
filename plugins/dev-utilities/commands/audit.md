@@ -52,6 +52,7 @@ Don't default to docs for everything — there are stronger options.
 - **Skills** (`.claude/skills/`) — on-demand reference, not loaded every session. Use the `skills-authoring` skill.
 - **Commands** — reusable prompts for specific workflows. Use the `commands-authoring` skill.
 - **Refactoring** — when the code itself is the problem.
+- **ai-cli modes** (`ai -m <mode>`) — preconfigured, non-interactive Claude Code sessions (full Agent SDK). Best for repeatable one-shot operations: hook-triggered validation (`ai -m validate -p "$(git diff)"`), black-box analysis, or scoped feedback where you want a complete agent but with a locked-in system prompt and no back-and-forth. Modes can target specific models. Define project-local modes in `.claude/.ai/modes/`.
 - **Bug fixes** — when tools/scripts are broken or misdocumented.
 
 ## Constraints

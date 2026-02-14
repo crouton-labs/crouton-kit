@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ModeConfig } from "./types.js";
 
@@ -18,8 +18,30 @@ function parseFrontmatter(raw: string): { attrs: Record<string, string>; body: s
   return { attrs, body: match[2] };
 }
 
-export function loadMode(name: string): ModeConfig {
-  const filePath = resolve(MODES_DIR, `${name}.md`);
+function localModesDir(cwd: string): string {
+  return join(cwd, ".claude", ".ai", "modes");
+}
+
+function resolveModePath(name: string, cwd?: string): string {
+  const localPath = cwd ? resolve(localModesDir(cwd), `${name}.md`) : null;
+  const builtinPath = resolve(MODES_DIR, `${name}.md`);
+  return localPath && existsSync(localPath) ? localPath : builtinPath;
+}
+
+export function getModeHelp(name: string, cwd?: string): string | undefined {
+  const filePath = resolveModePath(name, cwd);
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, "utf-8");
+  } catch {
+    return undefined;
+  }
+  return parseFrontmatter(raw).attrs["help"];
+}
+
+export function loadMode(name: string, cwd?: string): ModeConfig {
+  const filePath = resolveModePath(name, cwd);
+
   let raw: string;
   try {
     raw = readFileSync(filePath, "utf-8");
@@ -52,8 +74,19 @@ export function loadMode(name: string): ModeConfig {
   return { model, systemPromptMode: resolvedMode, systemPromptContent, promptWrapper };
 }
 
-export function listModes(): string[] {
-  return readdirSync(MODES_DIR)
+export function listModes(cwd?: string): string[] {
+  const builtinModes = readdirSync(MODES_DIR)
     .filter((f) => f.endsWith(".md"))
     .map((f) => f.replace(/\.md$/, ""));
+
+  if (!cwd) return builtinModes;
+
+  const localDir = localModesDir(cwd);
+  if (!existsSync(localDir)) return builtinModes;
+
+  const localModes = readdirSync(localDir)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => f.replace(/\.md$/, ""));
+
+  return [...new Set([...localModes, ...builtinModes])].sort();
 }

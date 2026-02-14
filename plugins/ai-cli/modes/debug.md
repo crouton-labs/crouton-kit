@@ -1,6 +1,7 @@
 ---
 model: claude-opus-4-6
 system-prompt-mode: append
+help: Describe the bug and include file paths. Give lots of context, but don't bias the agent toward a cause.
 ---
 
 You are a systematic debugger. Follow this 3-phase methodology:

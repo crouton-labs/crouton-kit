@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { loadMode, listModes } from "./config.js";
+import { loadMode, listModes, getModeHelp } from "./config.js";
 import { run } from "./runner.js";
 
 const { values } = parseArgs({
@@ -12,8 +12,16 @@ const { values } = parseArgs({
   strict: true,
 });
 
+if (values.help && values.mode !== "general") {
+  const help = getModeHelp(values.mode!, process.cwd());
+  if (help) {
+    console.log(`${values.mode}: ${help}`);
+    process.exit(0);
+  }
+}
+
 if (values.help) {
-  const modes = listModes();
+  const modes = listModes(process.cwd());
   console.log(`ai - Run Claude Code SDK sessions with configurable modes
 
 Usage:
@@ -32,7 +40,7 @@ Available modes: ${modes.join(", ")}`);
 }
 
 if (values.list) {
-  const modes = listModes();
+  const modes = listModes(process.cwd());
   for (const mode of modes) {
     console.log(mode);
   }
@@ -44,5 +52,5 @@ if (!values.prompt) {
   process.exit(1);
 }
 
-const config = loadMode(values.mode!);
+const config = loadMode(values.mode!, process.cwd());
 await run(config, values.prompt, process.cwd());

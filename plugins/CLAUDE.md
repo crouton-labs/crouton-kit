@@ -89,6 +89,10 @@ Without this registration, the plugin won't be discovered by Claude Code even if
 | `knowledge-capture` | `/interview`, `/learn`, `/collaborate` |
 
 
+## CI
+
+Pushing to `main` triggers CI that automatically bumps plugin versions. Do not manually update versions in `plugin.json` or `package.json`.
+
 ## Known Upstream Issues
 
 Plugin cache/update bugs that affect marketplace distribution:

@@ -4,8 +4,8 @@
 import { parseArgs } from "node:util";
 
 // src/config.ts
-import { readFileSync, readdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 var MODES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "modes");
 var PROMPT_WRAPPER_HEADING = "## Prompt Wrapper";
@@ -20,8 +20,26 @@ function parseFrontmatter(raw) {
   }
   return { attrs, body: match[2] };
 }
-function loadMode(name) {
-  const filePath = resolve(MODES_DIR, `${name}.md`);
+function localModesDir(cwd) {
+  return join(cwd, ".claude", ".ai", "modes");
+}
+function resolveModePath(name, cwd) {
+  const localPath = cwd ? resolve(localModesDir(cwd), `${name}.md`) : null;
+  const builtinPath = resolve(MODES_DIR, `${name}.md`);
+  return localPath && existsSync(localPath) ? localPath : builtinPath;
+}
+function getModeHelp(name, cwd) {
+  const filePath = resolveModePath(name, cwd);
+  let raw;
+  try {
+    raw = readFileSync(filePath, "utf-8");
+  } catch {
+    return void 0;
+  }
+  return parseFrontmatter(raw).attrs["help"];
+}
+function loadMode(name, cwd) {
+  const filePath = resolveModePath(name, cwd);
   let raw;
   try {
     raw = readFileSync(filePath, "utf-8");
@@ -47,8 +65,13 @@ function loadMode(name) {
   }
   return { model, systemPromptMode: resolvedMode, systemPromptContent, promptWrapper };
 }
-function listModes() {
-  return readdirSync(MODES_DIR).filter((f) => f.endsWith(".md")).map((f) => f.replace(/\.md$/, ""));
+function listModes(cwd) {
+  const builtinModes = readdirSync(MODES_DIR).filter((f) => f.endsWith(".md")).map((f) => f.replace(/\.md$/, ""));
+  if (!cwd) return builtinModes;
+  const localDir = localModesDir(cwd);
+  if (!existsSync(localDir)) return builtinModes;
+  const localModes = readdirSync(localDir).filter((f) => f.endsWith(".md")).map((f) => f.replace(/\.md$/, ""));
+  return [.../* @__PURE__ */ new Set([...localModes, ...builtinModes])].sort();
 }
 
 // src/runner.ts
@@ -56,19 +79,19 @@ import { query } from "@r-cli/sdk";
 
 // src/plugins.ts
 import { readFileSync as readFileSync2 } from "node:fs";
-import { join } from "node:path";
-var CLAUDE_DIR = join(process.env.HOME, ".claude");
-var PLUGINS_DIR = join(CLAUDE_DIR, "plugins");
+import { join as join2 } from "node:path";
+var CLAUDE_DIR = join2(process.env.HOME, ".claude");
+var PLUGINS_DIR = join2(CLAUDE_DIR, "plugins");
 function discoverPlugins() {
   let settings;
   try {
-    settings = JSON.parse(readFileSync2(join(CLAUDE_DIR, "settings.json"), "utf-8"));
+    settings = JSON.parse(readFileSync2(join2(CLAUDE_DIR, "settings.json"), "utf-8"));
   } catch {
     return [];
   }
   let installed;
   try {
-    installed = JSON.parse(readFileSync2(join(PLUGINS_DIR, "installed_plugins.json"), "utf-8"));
+    installed = JSON.parse(readFileSync2(join2(PLUGINS_DIR, "installed_plugins.json"), "utf-8"));
   } catch {
     return [];
   }
@@ -128,8 +151,15 @@ var { values } = parseArgs({
   },
   strict: true
 });
+if (values.help && values.mode !== "general") {
+  const help = getModeHelp(values.mode, process.cwd());
+  if (help) {
+    console.log(`${values.mode}: ${help}`);
+    process.exit(0);
+  }
+}
 if (values.help) {
-  const modes = listModes();
+  const modes = listModes(process.cwd());
   console.log(`ai - Run Claude Code SDK sessions with configurable modes
 
 Usage:
@@ -147,7 +177,7 @@ Available modes: ${modes.join(", ")}`);
   process.exit(0);
 }
 if (values.list) {
-  const modes = listModes();
+  const modes = listModes(process.cwd());
   for (const mode of modes) {
     console.log(mode);
   }
@@ -157,5 +187,5 @@ if (!values.prompt) {
   console.error("Error: -p/--prompt is required");
   process.exit(1);
 }
-var config = loadMode(values.mode);
+var config = loadMode(values.mode, process.cwd());
 await run(config, values.prompt, process.cwd());

@@ -1,6 +1,7 @@
 ---
 description: Gather requirements and ask questions without making changes
 argument-hint: [topic or feature to discuss]
+disable-model-invocation: true
 ---
 
 # Collaborative Mode

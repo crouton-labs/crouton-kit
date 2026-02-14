@@ -1,6 +1,7 @@
 ---
 description: Copy relevant file list and context summary to clipboard for carrying over to a new conversation
 allowed-tools: Bash(pbcopy:*)
+disable-model-invocation: true
 ---
 
 Collect all files relevant to the current conversation's task/topic.

@@ -1,6 +1,7 @@
 ---
 description: Interactive Q&A mode, saves as structured document
 argument-hint: <topic>
+disable-model-invocation: true
 ---
 
 # Interview Mode

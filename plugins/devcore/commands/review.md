@@ -151,8 +151,8 @@ Delegate fixes for issues identified **in this conversation**. If no issues exis
 2. **Propose** — Present categorized list. Wait for approval.
 
 3. **Execute** — Create team and tasks:
-   - **Obvious**: `devcore:junior-engineer` teammates in parallel
-   - **Likely**: `devcore:junior-engineer` or `devcore:programmer` based on scope
+   - **Obvious**: haiku subagents in parallel
+   - **Likely**: haiku subagents or `devcore:programmer` based on scope
    - **Complex**: Offer `devcore:senior-advisor` for analysis first, then implementation teammates
 
 4. **Skip team for <3 simple changes** — implement directly.

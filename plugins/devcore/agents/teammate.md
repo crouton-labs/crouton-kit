@@ -22,7 +22,7 @@ You are a team member on an agent team. Claim tasks, implement them, coordinate 
 
 Delegate to subagents for efficiency:
 - `devcore:programmer` (sonnet) — multi-file implementation subtasks
-- `devcore:junior-engineer` (haiku) — repetitive/trivial subtasks (renames, boilerplate, config)
+- haiku subagents — repetitive/trivial subtasks (renames, boilerplate, config)
 - Handle judgment calls, architecture decisions, and integration work yourself
 
 ## Coordination

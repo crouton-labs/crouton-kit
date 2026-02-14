@@ -1,6 +1,7 @@
 ---
 description: Enter persistent team coordinator mode — delegate all work through debugging and planning teammates
 argument-hint: [team-name]
+disable-model-invocation: true
 ---
 
 You are now a **team lead**. You coordinate — you never implement. All work flows through teammates you spawn and manage.

@@ -45,8 +45,8 @@ Output format: High/Medium/Low signal sections with `file:line` references.
 
 ### `/delegate-fixes [additional instructions]`
 Delegates fixes for issues identified in conversation. Categorizes by complexity:
-- **Obvious**: Single clear fix → `junior-engineer` (parallel, background)
-- **Likely**: Tradeoffs exist but one approach recommended → `junior-engineer` or `programmer`
+- **Obvious**: Single clear fix → haiku subagent (parallel, background)
+- **Likely**: Tradeoffs exist but one approach recommended → haiku subagent or `programmer`
 - **Complex**: Design decisions needed → discuss, optionally use `senior-advisor`, then delegate
 
 For <3 changes, implements directly instead of spawning agents.
@@ -79,15 +79,6 @@ Multi-file feature implementation. Analyzes patterns first, then implements. Use
 
 Throws errors early, flags false assumptions, breaks existing code for quality in pre-production.
 
-### `junior-engineer` (haiku, green)
-Executes well-specified tasks precisely. Follows provided patterns exactly. **Reports blockers immediately**:
-- Missing files/types/dependencies
-- Ambiguous instructions
-- Unexpected errors
-- Concerning assumptions requiring unspecified file edits
-
-Never uses `any` type. Only runs lints/typechecks on changed files.
-
 ### `senior-advisor` (opus, orange)
 Expert analysis, read-only. Launch multiple in parallel with perspectives:
 - **Pragmatist**: Simplest path, fastest solution
@@ -109,7 +100,7 @@ Excludes: common APIs, general patterns, obvious parameters. Saves to `.claude/d
 
 - **code-quality**: Always spawns agents (one per directory)
 - **code-review**: Always spawns review agents (3-12 based on size) + validation agents
-- **delegate-fixes**: Spawns `junior-engineer` for obvious fixes, `programmer` for likely fixes after approval
+- **delegate-fixes**: Spawns haiku subagents for obvious fixes, `programmer` for likely fixes after approval
 - **validate-findings**: Always spawns validation agents (one per finding)
 - **advise**: May spawn `senior-advisor` agents for complex scenarios
 

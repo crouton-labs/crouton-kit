@@ -3,6 +3,7 @@ description: Stage and commit changes into logical commits
 argument-hint: [scope]
 allowed-tools: Bash(git:*)
 model: sonnet
+disable-model-invocation: true
 ---
 
 Stage and commit changes into logical commits.

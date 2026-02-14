@@ -1,6 +1,7 @@
 ---
 description: Debug an issue using adaptive multi-perspective investigation
 argument-hint: <description of issue / further advice>
+disable-model-invocation: true
 ---
 
 Debug the issue described in `$ARGUMENTS` and/or recent conversation context. Diagnose root cause—don't fix.

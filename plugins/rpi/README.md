@@ -69,7 +69,7 @@ Three-phase feature workflow with collaborative design, iterative planning, and 
 1. Reads plan document (if master plan with sub-plans, implements current phase only)
 2. Builds dependency graph from plan tasks
 3. Delegates to agents:
-   - `devcore:junior-engineer` for bounded, well-specified tasks
+   - haiku subagents for bounded, well-specified tasks
    - `devcore:programmer` for pattern analysis or multi-file changes
 4. Launches tasks respecting dependencies:
    - All no-dependency tasks launch immediately (parallel batch)

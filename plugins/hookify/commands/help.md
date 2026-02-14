@@ -1,6 +1,7 @@
 ---
 description: Get help with the hookify plugin
 allowed-tools: ["Read"]
+disable-model-invocation: true
 ---
 
 # Hookify Plugin Help

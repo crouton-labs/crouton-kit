@@ -1,6 +1,7 @@
 ---
 description: Reflect on operation and save key-takeaways as learned skill
 argument-hint: <focus-of-learning> <output-file>
+disable-model-invocation: true
 ---
 
 Based off this conversation, please extract the key takeaways relevant to $1. Update $2 with what you've learned.

@@ -1,6 +1,7 @@
 ---
 description: Verify code quality and push to remote
 allowed-tools: Bash(git:*), Skill
+disable-model-invocation: true
 ---
 
 Push current branch to remote after verifying code quality.

@@ -1,6 +1,7 @@
 ---
 description: Enable or disable hookify rules interactively
 allowed-tools: ["Glob", "Read", "Edit", "AskUserQuestion", "Skill"]
+disable-model-invocation: true
 ---
 
 # Configure Hookify Rules

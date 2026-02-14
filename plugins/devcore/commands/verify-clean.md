@@ -1,5 +1,6 @@
 ---
 description: Run typechecks, lints, and tests to verify code quality
+disable-model-invocation: true
 ---
 
 # Verify Clean

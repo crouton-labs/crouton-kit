@@ -1,6 +1,7 @@
 ---
 description: List all configured hookify rules
 allowed-tools: ["Glob", "Read", "Skill"]
+disable-model-invocation: true
 ---
 
 # List Hookify Rules

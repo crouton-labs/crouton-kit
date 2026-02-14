@@ -1,0 +1,19 @@
+{
+  "name": "ai-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "ai": "./dist/ai.mjs"
+  },
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/ai.mjs --banner:js='#!/usr/bin/env node' --external:@r-cli/sdk",
+    "dev": "npm run build && node dist/ai.mjs"
+  },
+  "dependencies": {
+    "@r-cli/sdk": "^1.1.117"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

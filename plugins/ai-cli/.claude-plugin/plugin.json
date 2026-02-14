@@ -1,0 +1,8 @@
+{
+  "name": "ai-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for running Claude Code SDK sessions with configurable modes",
+  "author": {
+    "name": "Silas Rhyneer"
+  }
+}

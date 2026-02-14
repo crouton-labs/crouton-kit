@@ -120,6 +120,18 @@
         "rules",
         "skills"
       ]
+    },
+    {
+      "name": "ai-cli",
+      "source": "./plugins/ai-cli",
+      "description": "CLI tool for running Claude Code SDK sessions with configurable modes",
+      "version": "1.0.0",
+      "keywords": [
+        "cli",
+        "sdk",
+        "modes",
+        "automation"
+      ]
     }
   ]
 }

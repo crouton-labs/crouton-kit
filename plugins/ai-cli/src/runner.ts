@@ -1,5 +1,6 @@
 import { query } from "@r-cli/sdk";
 import type { ModeConfig } from "./types.js";
+import { discoverPlugins } from "./plugins.js";
 
 export async function run(config: ModeConfig, prompt: string, cwd: string): Promise<void> {
   const finalPrompt = config.promptWrapper
@@ -20,6 +21,7 @@ export async function run(config: ModeConfig, prompt: string, cwd: string): Prom
       cwd,
       includePartialMessages: true,
       settingSources: ["user", "project", "local"],
+      plugins: discoverPlugins(),
     },
   });
 

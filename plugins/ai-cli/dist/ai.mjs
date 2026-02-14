@@ -53,6 +53,38 @@ function listModes() {
 
 // src/runner.ts
 import { query } from "@r-cli/sdk";
+
+// src/plugins.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+import { join } from "node:path";
+var CLAUDE_DIR = join(process.env.HOME, ".claude");
+var PLUGINS_DIR = join(CLAUDE_DIR, "plugins");
+function discoverPlugins() {
+  let settings;
+  try {
+    settings = JSON.parse(readFileSync2(join(CLAUDE_DIR, "settings.json"), "utf-8"));
+  } catch {
+    return [];
+  }
+  let installed;
+  try {
+    installed = JSON.parse(readFileSync2(join(PLUGINS_DIR, "installed_plugins.json"), "utf-8"));
+  } catch {
+    return [];
+  }
+  const enabled = settings.enabledPlugins;
+  if (!enabled) return [];
+  const plugins = [];
+  for (const [name, isEnabled] of Object.entries(enabled)) {
+    if (!isEnabled) continue;
+    const entries = installed.plugins[name];
+    if (!entries || entries.length === 0) continue;
+    plugins.push({ type: "local", path: entries[0].installPath });
+  }
+  return plugins;
+}
+
+// src/runner.ts
 async function run(config2, prompt, cwd) {
   const finalPrompt = config2.promptWrapper ? config2.promptWrapper.replace("{{prompt}}", prompt) : prompt;
   const systemPrompt = config2.systemPromptMode === "append" ? { type: "preset", preset: "claude_code", append: config2.systemPromptContent } : config2.systemPromptContent;
@@ -65,7 +97,8 @@ async function run(config2, prompt, cwd) {
       allowDangerouslySkipPermissions: true,
       cwd,
       includePartialMessages: true,
-      settingSources: ["user", "project", "local"]
+      settingSources: ["user", "project", "local"],
+      plugins: discoverPlugins()
     }
   });
   for await (const message of result) {

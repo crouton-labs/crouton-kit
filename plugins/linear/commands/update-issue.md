@@ -1,5 +1,6 @@
 ---
 description: Update linear issue
+disable-model-invocation: true
 ---
 Update an existing Linear issue using the `linear` CLI.
 

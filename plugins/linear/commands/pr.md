@@ -1,5 +1,6 @@
 ---
-description: Make a PR into dev from this feature branch. Make sure the PR is linked to relevant linear issues...
+description: Make a PR into dev from this feature branch. Make sure the PR is linked to relevant linear issues
+disable-model-invocation: true
 ---
 Create a GitHub pull request linked to the Linear issue using the `linear` CLI.
 

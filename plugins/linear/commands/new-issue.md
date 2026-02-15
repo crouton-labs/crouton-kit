@@ -1,5 +1,6 @@
 ---
 description: Add linear issue
+disable-model-invocation: true
 ---
 Create a Linear issue using the `linear` CLI.
 

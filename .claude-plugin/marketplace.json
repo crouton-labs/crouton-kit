@@ -145,6 +145,18 @@
         "validation",
         "testing"
       ]
+    },
+    {
+      "name": "ai-workflow",
+      "source": "./plugins/ai-workflow",
+      "description": "Multi-step agent workflows — chain headless ai-cli runs with branching and Linear integration",
+      "version": "1.1.0",
+      "keywords": [
+        "workflow",
+        "agents",
+        "automation",
+        "linear"
+      ]
     }
   ]
 }

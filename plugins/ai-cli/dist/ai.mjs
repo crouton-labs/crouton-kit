@@ -111,6 +111,7 @@ function discoverPlugins() {
 async function run(config2, prompt, cwd, options = { headless: false }) {
   const finalPrompt = config2.promptWrapper ? config2.promptWrapper.replace("{{prompt}}", prompt) : prompt;
   const systemPrompt = config2.systemPromptMode === "append" ? { type: "preset", preset: "claude_code", append: config2.systemPromptContent } : config2.systemPromptContent;
+  const mcpServers = process.env.AI_MCP_SERVERS ? JSON.parse(process.env.AI_MCP_SERVERS) : void 0;
   const result = query({
     prompt: finalPrompt,
     options: {
@@ -121,7 +122,8 @@ async function run(config2, prompt, cwd, options = { headless: false }) {
       cwd,
       includePartialMessages: true,
       settingSources: ["user", "project", "local"],
-      plugins: discoverPlugins()
+      plugins: discoverPlugins(),
+      ...mcpServers && { mcpServers }
     }
   });
   let outputBuffer = "";

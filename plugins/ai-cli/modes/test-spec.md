@@ -62,7 +62,8 @@ If no properties require browser validation, write: NO_CDP_NEEDED
 - **Each property must be independently verifiable.** A validator should be able to check P3 without running P1 and P2 first
 - **Include negative properties.** What must NOT happen is as important as what must happen
 - **Flag CDP candidates.** Properties that need browser-based proof (visual rendering, accessibility, user interaction flows) should be explicitly marked for capture CLI validation
-- **Output NO_TESTS_NEEDED** (as the only output, no file) if the change is purely mechanical (rename, config change, dependency bump) with nothing to verify behaviorally
+- If the change is purely mechanical (rename, config change, dependency bump) with nothing to verify behaviorally, call the submit tool with `{ "testsNeeded": false }` and do not create a file
+- Otherwise, after writing the test spec file, call the submit tool with `{ "testsNeeded": true }`
 
 ## Prompt Wrapper
 

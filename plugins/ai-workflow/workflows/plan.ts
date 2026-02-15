@@ -39,7 +39,6 @@ export default defineWorkflow(
       ctx.log(`Reviewing plan (iteration ${i})`);
       const review = await ctx.agent("review-plan", [
         `Review the plan against the ticket requirements.`,
-        `Output PASS if fully covered, or list blocking issues.`,
         ``,
         `Plan path: ${planPath}`,
         ``,
@@ -47,14 +46,19 @@ export default defineWorkflow(
         `**${ticket.title}**`,
         ``,
         ticket.description,
-      ].join("\n"));
+      ].join("\n"), { submit: true });
 
-      if (review.output.includes("PASS")) {
+      if (!review.data) {
+        throw new Error(`Plan reviewer did not submit structured data at iteration ${i}`);
+      }
+      const verdict = review.data as { verdict: "pass" | "fail"; issues?: string[] };
+
+      if (verdict.verdict === "pass") {
         ctx.log(`Plan approved`);
         break;
       }
 
-      reviewIssues = review.output;
+      reviewIssues = verdict.issues?.join("\n") ?? review.output;
       if (i === MAX_ITERATIONS) {
         ctx.log(`Max iterations reached — proceeding with current plan`);
       }
@@ -66,9 +70,10 @@ export default defineWorkflow(
       `Spec path: ${specPath}`,
       `Plan path: ${planPath}`,
       `Topic: ${topic}`,
-    ].join("\n"));
+    ].join("\n"), { submit: true });
 
-    const testsNeeded = !testSpec.output.includes("NO_TESTS_NEEDED");
+    const testSpecResult = testSpec.data as { testsNeeded: boolean } | undefined;
+    const testsNeeded = testSpecResult?.testsNeeded ?? true;
     const testSpecPath = `.claude/plans/${topic}.test-spec.md`;
     ctx.log(testsNeeded ? `Test spec created` : `No tests needed`);
 

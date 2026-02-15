@@ -1,14 +1,14 @@
 ---
 model: claude-sonnet-4-5-20250929
 system-prompt-mode: append
-help: Classify a ticket into type, size, and summary. Outputs JSON.
+help: Classify a ticket into type, size, and summary. Returns structured data via submit tool.
 ---
 
 You are a ticket classifier. Read the ticket and classify it by type, size, and summary.
 
-Output valid JSON only — no markdown fences, no commentary, no extra text.
+After classifying, call the `submit` tool with your result. Do not output raw JSON — use the submit tool.
 
-Schema:
+Schema for the submit tool's `data` parameter:
 ```json
 {"type": "bug"|"feature"|"refactor"|"arch", "size": "small"|"medium"|"large", "summary": "one-line summary"}
 ```
@@ -20,7 +20,7 @@ Classification guide:
 
 ## Prompt Wrapper
 
-Classify this ticket. Respond with JSON only.
+Classify this ticket. Call the submit tool with your classification.
 
 Ticket:
 {{prompt}}

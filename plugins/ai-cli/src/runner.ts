@@ -15,6 +15,10 @@ export async function run(config: ModeConfig, prompt: string, cwd: string, optio
     ? { type: "preset" as const, preset: "claude_code" as const, append: config.systemPromptContent }
     : config.systemPromptContent;
 
+  const mcpServers = process.env.AI_MCP_SERVERS
+    ? JSON.parse(process.env.AI_MCP_SERVERS) as Record<string, unknown>
+    : undefined;
+
   const result = query({
     prompt: finalPrompt,
     options: {
@@ -26,6 +30,7 @@ export async function run(config: ModeConfig, prompt: string, cwd: string, optio
       includePartialMessages: true,
       settingSources: ["user", "project", "local"],
       plugins: discoverPlugins(),
+      ...(mcpServers && { mcpServers }),
     },
   });
 

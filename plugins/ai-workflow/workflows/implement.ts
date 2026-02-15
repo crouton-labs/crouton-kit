@@ -41,50 +41,37 @@ export default defineWorkflow(
         `Ticket: ${ticket.identifier} — ${ticket.title}`,
         `Iteration: ${iteration}/${MAX_ITERATIONS}`,
         lastOutput ? `\n--- PREVIOUS ITERATION OUTPUT ---\n${lastOutput.slice(0, 10000)}` : "",
-      ].filter(Boolean).join("\n"));
+      ].filter(Boolean).join("\n"), { submit: true });
 
-      const output = tactician.output;
+      if (!tactician.data) {
+        throw new Error(`Tactician did not submit structured data at iteration ${iteration}`);
+      }
+      const decision = tactician.data as { action: "done" | "validate" | "implement"; prompt: string; summary?: string };
 
-      // Parse action
-      if (output.includes("ACTION: done")) {
+      if (decision.action === "done") {
         ctx.log(`Tactician declared done at iteration ${iteration}`);
-        lastOutput = output;
+        lastOutput = decision.summary ?? tactician.output;
         break;
       }
 
-      if (output.includes("ACTION: validate")) {
-        const prompt = output.split("ACTION: validate")[1].trim();
+      if (decision.action === "validate") {
         ctx.log(`Dispatching validation`);
         const result = await ctx.agent("validate", [
           `Plan path: ${planPath}`,
           `Spec path: ${specPath}`,
           ``,
-          prompt,
+          decision.prompt,
         ].join("\n"));
         lastOutput = result.output;
         continue;
       }
 
-      if (output.includes("ACTION: implement")) {
-        const prompt = output.split("ACTION: implement")[1].trim();
-        ctx.log(`Dispatching implementation`);
-        const result = await ctx.agent("implement", [
-          `Plan path: ${planPath}`,
-          `Spec path: ${specPath}`,
-          ``,
-          prompt,
-        ].join("\n"));
-        lastOutput = result.output;
-        continue;
-      }
-
-      // Couldn't parse action — treat as implementation prompt
-      ctx.log(`Could not parse tactician action — treating as implementation`);
+      ctx.log(`Dispatching implementation`);
       const result = await ctx.agent("implement", [
         `Plan path: ${planPath}`,
         `Spec path: ${specPath}`,
         ``,
-        output,
+        decision.prompt,
       ].join("\n"));
       lastOutput = result.output;
     }
@@ -131,16 +118,19 @@ export default defineWorkflow(
     // ── Adversarial CDP validation (conditional) ──────────────
     ctx.log(`\n── Adversarial Validation ──`);
 
-    const { output: cdpCheck } = await ctx.agent("general", [
+    const { data: cdpCheck } = await ctx.agent("general", [
       `Read the behavioral test spec at ${testSpecPath}.`,
       ``,
       `If it contains a "CDP Validation Candidates" section with actual properties (not NO_CDP_NEEDED),`,
-      `output NEEDS_CDP followed by the list of properties to validate.`,
+      `call the submit tool with: { "needed": true, "properties": ["P1: brief", ...] }`,
       ``,
-      `If the file doesn't exist, or says NO_CDP_NEEDED, or has no CDP candidates, output NO_CDP.`,
-    ].join("\n"));
+      `If the file doesn't exist, or says NO_CDP_NEEDED, or has no CDP candidates,`,
+      `call the submit tool with: { "needed": false }`,
+    ].join("\n"), { submit: true });
 
-    if (cdpCheck.includes("NEEDS_CDP")) {
+    const cdpDecision = cdpCheck as { needed: boolean; properties?: string[] } | undefined;
+
+    if (cdpDecision?.needed) {
       ctx.log(`CDP validation needed — running adversarial checks`);
 
       const cdpResult = await ctx.agent("validate", [
@@ -172,7 +162,7 @@ export default defineWorkflow(
         `Plan path: ${planPath}`,
       ].join("\n"));
 
-      if (cdpResult.output.includes("FAIL")) {
+      if (cdpResult.output.includes("FAIL") || cdpResult.output.includes("fail")) {
         ctx.log(`CDP validation found issues — attempting fixes`);
         await ctx.agent("implement", [
           `Fix the following CDP validation failures:`,

@@ -3,7 +3,8 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   Ctx,
   AgentOpts,
@@ -20,6 +21,15 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
+
+function parseJSON<T>(raw: string, context: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const preview = raw.length > 500 ? raw.slice(0, 500) + "…" : raw;
+    throw new Error(`Failed to parse JSON from ${context}:\n${preview}`);
+  }
+}
 
 function loadConfig(cwd: string): WorkflowConfig {
   const configPath = join(cwd, ".claude", "workflow.json");
@@ -77,6 +87,19 @@ export function createCtx(cwd: string, workflow?: string, args?: string[]): Ctx 
       const spawnCwd = opts?.cwd ? opts.cwd : cwd;
       const timeout = opts?.timeout;
 
+      // Submit mode: wire up MCP server + env vars
+      const submitFile = opts?.submit ? join(runDir, `submit-${randomUUID()}.json`) : undefined;
+      const env: Record<string, string> = { ...process.env as Record<string, string> };
+      if (submitFile) {
+        writeFileSync(submitFile, "");
+        const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+        const serverPath = join(pluginRoot, "mcp", "submit-server.mjs");
+        env.AI_WORKFLOW_SUBMIT_PATH = submitFile;
+        env.AI_MCP_SERVERS = JSON.stringify({
+          submit: { type: "stdio", command: "node", args: [serverPath] },
+        });
+      }
+
       appendLog({ type: "agent", mode, prompt: prompt.slice(0, 500) });
 
       try {
@@ -84,27 +107,37 @@ export function createCtx(cwd: string, workflow?: string, args?: string[]): Ctx 
           cwd: spawnCwd,
           timeout,
           maxBuffer: 10 * 1024 * 1024,
+          env,
         });
 
         const duration = performance.now() - start;
         if (stderr) ctx.log(stderr);
 
-        const result = JSON.parse(stdout) as { sessionId: string; output: string; exitCode: number };
+        const result = parseJSON<{ sessionId: string; output: string; exitCode: number }>(stdout, `agent(${mode})`);
         appendLog({
           type: "agent",
           mode,
-          output: result.output.slice(0, 2000),
+          output: result.output?.slice(0, 2000) ?? "",
           sessionId: result.sessionId,
           duration,
           exitCode: result.exitCode,
         });
 
-        return { ...result, duration };
+        // Read submitted data if submit mode was active
+        let data: unknown;
+        if (submitFile && existsSync(submitFile)) {
+          const raw = readFileSync(submitFile, "utf-8");
+          if (raw.length > 0) {
+            data = parseJSON<unknown>(raw, `submit file for agent(${mode})`);
+          }
+        }
+
+        return { ...result, duration, ...(data !== undefined && { data }) };
       } catch (err: unknown) {
         const duration = performance.now() - start;
         const message = err instanceof Error ? err.message : String(err);
         appendLog({ type: "agent", mode, error: message, duration });
-        throw err;
+        throw new Error(`agent(${mode}) failed after ${(duration / 1000).toFixed(1)}s: ${message}`);
       }
     },
 
@@ -145,8 +178,8 @@ export function createCtx(cwd: string, workflow?: string, args?: string[]): Ctx 
       if (!meta.ticketId) updateMeta({ ticketId: id });
       return {
         async read(): Promise<TicketData> {
-          const { stdout } = await execAsync(`linear issue view ${id} -j`, { cwd });
-          const raw = JSON.parse(stdout) as LinearIssueJson;
+          const { stdout } = await execAsync(`linear issue view ${shellEscape(id)} -j`, { cwd });
+          const raw = parseJSON<LinearIssueJson>(stdout, `linear issue view ${id}`);
           return {
             identifier: raw.identifier,
             title: raw.title,

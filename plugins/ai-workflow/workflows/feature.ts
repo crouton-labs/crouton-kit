@@ -11,22 +11,23 @@ export default defineWorkflow(
 
     // Step 1: Qualify — does this need a spec or can we go straight to planning?
     ctx.log(`Qualifying ${ticketId}`);
-    const { output: qualification } = await ctx.agent("general", [
+    const { data: qualification } = await ctx.agent("general", [
       "Read this ticket and determine whether it needs a detailed spec or can go straight to implementation planning.",
       "",
       "NEEDS_SPEC if: ambiguous requirements, UX decisions needed, multiple valid approaches, unclear scope, needs human discussion",
       "STRAIGHT_TO_PLAN if: clear requirements, obvious approach, well-defined scope, no open questions",
       "",
-      "Output exactly one of: NEEDS_SPEC or STRAIGHT_TO_PLAN",
-      "Followed by a one-line reason.",
+      "Call the submit tool with: { \"decision\": \"NEEDS_SPEC\" | \"STRAIGHT_TO_PLAN\", \"reason\": \"one-line reason\" }",
       "",
       `--- TICKET ---`,
       `**${ticket.title}**`,
       ``,
       ticket.description,
-    ].join("\n"));
+    ].join("\n"), { submit: true });
 
-    const needsSpec = qualification.includes("NEEDS_SPEC");
+    if (!qualification) throw new Error(`Qualification agent did not submit data for ${ticketId}`);
+    const { decision } = qualification as { decision: string; reason: string };
+    const needsSpec = decision === "NEEDS_SPEC";
 
     if (needsSpec) {
       ctx.log(`Ticket needs spec — drafting`);

@@ -265,7 +265,10 @@ if (command === "run") {
   try {
     await workflow.run(ctx, ...args);
   } catch (err) {
-    ctx.log(`Workflow "${name}" failed: ${err}`);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    ctx.log(`Workflow "${name}" failed: ${message}`);
+    if (stack) process.stderr.write(stack + "\n");
     process.exit(1);
   }
 

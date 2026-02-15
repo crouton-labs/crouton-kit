@@ -68,6 +68,8 @@ export interface AgentOpts {
   cwd?: string;
   /** Timeout in ms. */
   timeout?: number;
+  /** Require structured output via MCP submit tool. Result lands on AgentResult.data. */
+  submit?: boolean;
 }
 
 export interface AgentResult {
@@ -79,6 +81,8 @@ export interface AgentResult {
   exitCode: number;
   /** Wall-clock ms. */
   duration: number;
+  /** Structured data returned via MCP submit tool (when opts.submit is true). */
+  data?: unknown;
 }
 
 // ============================================================

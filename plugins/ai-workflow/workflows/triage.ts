@@ -11,14 +11,12 @@ export default defineWorkflow(
       ctx.log(`Triaging ${id}`);
 
       const ticket = await ctx.ticket(id).read();
-      const { output } = await ctx.agent("triage", `${ticket.identifier}: ${ticket.title}\n\n${ticket.description}`);
+      const { data } = await ctx.agent("triage", `${ticket.identifier}: ${ticket.title}\n\n${ticket.description}`, { submit: true });
 
-      // triage mode outputs JSON: { type, size, summary }
-      const classification = JSON.parse(output) as {
-        type: "bug" | "feature";
-        size: "small" | "medium" | "large";
-        summary: string;
-      };
+      if (!data) {
+        throw new Error(`Triage agent did not submit structured data for ${id}`);
+      }
+      const classification = data as { type: "bug" | "feature"; size: "small" | "medium" | "large"; summary: string };
 
       await ctx.ticket(id).addLabel(classification.type);
       await ctx.ticket(id).comment(

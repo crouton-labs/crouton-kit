@@ -2,7 +2,7 @@
 
 // src/cli.ts
 import { parseArgs } from "node:util";
-import { resolve, join as join2 } from "node:path";
+import { resolve as resolve2, join as join2 } from "node:path";
 import { pathToFileURL } from "node:url";
 import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync } from "node:fs";
 import { glob } from "node:fs/promises";
@@ -13,9 +13,19 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 var execFileAsync = promisify(execFile);
 var execAsync = promisify(exec);
+function parseJSON(raw, context) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const preview = raw.length > 500 ? raw.slice(0, 500) + "\u2026" : raw;
+    throw new Error(`Failed to parse JSON from ${context}:
+${preview}`);
+  }
+}
 function loadConfig(cwd) {
   const configPath = join(cwd, ".claude", "workflow.json");
   if (!existsSync(configPath)) {
@@ -61,30 +71,49 @@ function createCtx(cwd, workflow, args) {
       if (opts?.model) cliArgs.push("--model", opts.model);
       const spawnCwd = opts?.cwd ? opts.cwd : cwd;
       const timeout = opts?.timeout;
+      const submitFile = opts?.submit ? join(runDir, `submit-${randomUUID()}.json`) : void 0;
+      const env = { ...process.env };
+      if (submitFile) {
+        writeFileSync(submitFile, "");
+        const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+        const serverPath = join(pluginRoot, "mcp", "submit-server.mjs");
+        env.AI_WORKFLOW_SUBMIT_PATH = submitFile;
+        env.AI_MCP_SERVERS = JSON.stringify({
+          submit: { type: "stdio", command: "node", args: [serverPath] }
+        });
+      }
       appendLog({ type: "agent", mode, prompt: prompt.slice(0, 500) });
       try {
         const { stdout, stderr } = await execFileAsync("ai", cliArgs, {
           cwd: spawnCwd,
           timeout,
-          maxBuffer: 10 * 1024 * 1024
+          maxBuffer: 10 * 1024 * 1024,
+          env
         });
         const duration = performance.now() - start;
         if (stderr) ctx.log(stderr);
-        const result = JSON.parse(stdout);
+        const result = parseJSON(stdout, `agent(${mode})`);
         appendLog({
           type: "agent",
           mode,
-          output: result.output.slice(0, 2e3),
+          output: result.output?.slice(0, 2e3) ?? "",
           sessionId: result.sessionId,
           duration,
           exitCode: result.exitCode
         });
-        return { ...result, duration };
+        let data;
+        if (submitFile && existsSync(submitFile)) {
+          const raw = readFileSync(submitFile, "utf-8");
+          if (raw.length > 0) {
+            data = parseJSON(raw, `submit file for agent(${mode})`);
+          }
+        }
+        return { ...result, duration, ...data !== void 0 && { data } };
       } catch (err) {
         const duration = performance.now() - start;
         const message = err instanceof Error ? err.message : String(err);
         appendLog({ type: "agent", mode, error: message, duration });
-        throw err;
+        throw new Error(`agent(${mode}) failed after ${(duration / 1e3).toFixed(1)}s: ${message}`);
       }
     },
     async exec(command2) {
@@ -122,8 +151,8 @@ function createCtx(cwd, workflow, args) {
       if (!meta.ticketId) updateMeta({ ticketId: id });
       return {
         async read() {
-          const { stdout } = await execAsync(`linear issue view ${id} -j`, { cwd });
-          const raw = JSON.parse(stdout);
+          const { stdout } = await execAsync(`linear issue view ${shellEscape(id)} -j`, { cwd });
+          const raw = parseJSON(stdout, `linear issue view ${id}`);
           return {
             identifier: raw.identifier,
             title: raw.title,
@@ -194,10 +223,13 @@ var triage_default = defineWorkflow(
     for (const id of ticketIds) {
       ctx.log(`Triaging ${id}`);
       const ticket = await ctx.ticket(id).read();
-      const { output } = await ctx.agent("triage", `${ticket.identifier}: ${ticket.title}
+      const { data } = await ctx.agent("triage", `${ticket.identifier}: ${ticket.title}
 
-${ticket.description}`);
-      const classification = JSON.parse(output);
+${ticket.description}`, { submit: true });
+      if (!data) {
+        throw new Error(`Triage agent did not submit structured data for ${id}`);
+      }
+      const classification = data;
       await ctx.ticket(id).addLabel(classification.type);
       await ctx.ticket(id).comment(
         `## Triaged
@@ -259,21 +291,22 @@ var feature_default = defineWorkflow(
   async (ctx, ticketId) => {
     const ticket = await ctx.ticket(ticketId).read();
     ctx.log(`Qualifying ${ticketId}`);
-    const { output: qualification } = await ctx.agent("general", [
+    const { data: qualification } = await ctx.agent("general", [
       "Read this ticket and determine whether it needs a detailed spec or can go straight to implementation planning.",
       "",
       "NEEDS_SPEC if: ambiguous requirements, UX decisions needed, multiple valid approaches, unclear scope, needs human discussion",
       "STRAIGHT_TO_PLAN if: clear requirements, obvious approach, well-defined scope, no open questions",
       "",
-      "Output exactly one of: NEEDS_SPEC or STRAIGHT_TO_PLAN",
-      "Followed by a one-line reason.",
+      'Call the submit tool with: { "decision": "NEEDS_SPEC" | "STRAIGHT_TO_PLAN", "reason": "one-line reason" }',
       "",
       `--- TICKET ---`,
       `**${ticket.title}**`,
       ``,
       ticket.description
-    ].join("\n"));
-    const needsSpec = qualification.includes("NEEDS_SPEC");
+    ].join("\n"), { submit: true });
+    if (!qualification) throw new Error(`Qualification agent did not submit data for ${ticketId}`);
+    const { decision } = qualification;
+    const needsSpec = decision === "NEEDS_SPEC";
     if (needsSpec) {
       ctx.log(`Ticket needs spec \u2014 drafting`);
       const spec = await ctx.agent(
@@ -335,7 +368,6 @@ ${reviewIssues}` : ""
       ctx.log(`Reviewing plan (iteration ${i})`);
       const review = await ctx.agent("review-plan", [
         `Review the plan against the ticket requirements.`,
-        `Output PASS if fully covered, or list blocking issues.`,
         ``,
         `Plan path: ${planPath}`,
         ``,
@@ -343,12 +375,16 @@ ${reviewIssues}` : ""
         `**${ticket.title}**`,
         ``,
         ticket.description
-      ].join("\n"));
-      if (review.output.includes("PASS")) {
+      ].join("\n"), { submit: true });
+      if (!review.data) {
+        throw new Error(`Plan reviewer did not submit structured data at iteration ${i}`);
+      }
+      const verdict = review.data;
+      if (verdict.verdict === "pass") {
         ctx.log(`Plan approved`);
         break;
       }
-      reviewIssues = review.output;
+      reviewIssues = verdict.issues?.join("\n") ?? review.output;
       if (i === MAX_ITERATIONS) {
         ctx.log(`Max iterations reached \u2014 proceeding with current plan`);
       }
@@ -358,8 +394,9 @@ ${reviewIssues}` : ""
       `Spec path: ${specPath}`,
       `Plan path: ${planPath}`,
       `Topic: ${topic}`
-    ].join("\n"));
-    const testsNeeded = !testSpec.output.includes("NO_TESTS_NEEDED");
+    ].join("\n"), { submit: true });
+    const testSpecResult = testSpec.data;
+    const testsNeeded = testSpecResult?.testsNeeded ?? true;
     const testSpecPath = `.claude/plans/${topic}.test-spec.md`;
     ctx.log(testsNeeded ? `Test spec created` : `No tests needed`);
     await ctx.handoff(planSession.sessionId, [
@@ -411,43 +448,33 @@ var implement_default = defineWorkflow(
         lastOutput ? `
 --- PREVIOUS ITERATION OUTPUT ---
 ${lastOutput.slice(0, 1e4)}` : ""
-      ].filter(Boolean).join("\n"));
-      const output = tactician.output;
-      if (output.includes("ACTION: done")) {
+      ].filter(Boolean).join("\n"), { submit: true });
+      if (!tactician.data) {
+        throw new Error(`Tactician did not submit structured data at iteration ${iteration}`);
+      }
+      const decision = tactician.data;
+      if (decision.action === "done") {
         ctx.log(`Tactician declared done at iteration ${iteration}`);
-        lastOutput = output;
+        lastOutput = decision.summary ?? tactician.output;
         break;
       }
-      if (output.includes("ACTION: validate")) {
-        const prompt = output.split("ACTION: validate")[1].trim();
+      if (decision.action === "validate") {
         ctx.log(`Dispatching validation`);
         const result2 = await ctx.agent("validate", [
           `Plan path: ${planPath}`,
           `Spec path: ${specPath}`,
           ``,
-          prompt
+          decision.prompt
         ].join("\n"));
         lastOutput = result2.output;
         continue;
       }
-      if (output.includes("ACTION: implement")) {
-        const prompt = output.split("ACTION: implement")[1].trim();
-        ctx.log(`Dispatching implementation`);
-        const result2 = await ctx.agent("implement", [
-          `Plan path: ${planPath}`,
-          `Spec path: ${specPath}`,
-          ``,
-          prompt
-        ].join("\n"));
-        lastOutput = result2.output;
-        continue;
-      }
-      ctx.log(`Could not parse tactician action \u2014 treating as implementation`);
+      ctx.log(`Dispatching implementation`);
       const result = await ctx.agent("implement", [
         `Plan path: ${planPath}`,
         `Spec path: ${specPath}`,
         ``,
-        output
+        decision.prompt
       ].join("\n"));
       lastOutput = result.output;
     }
@@ -483,15 +510,17 @@ ${lastOutput.slice(0, 1e4)}` : ""
     }
     ctx.log(`
 \u2500\u2500 Adversarial Validation \u2500\u2500`);
-    const { output: cdpCheck } = await ctx.agent("general", [
+    const { data: cdpCheck } = await ctx.agent("general", [
       `Read the behavioral test spec at ${testSpecPath}.`,
       ``,
       `If it contains a "CDP Validation Candidates" section with actual properties (not NO_CDP_NEEDED),`,
-      `output NEEDS_CDP followed by the list of properties to validate.`,
+      `call the submit tool with: { "needed": true, "properties": ["P1: brief", ...] }`,
       ``,
-      `If the file doesn't exist, or says NO_CDP_NEEDED, or has no CDP candidates, output NO_CDP.`
-    ].join("\n"));
-    if (cdpCheck.includes("NEEDS_CDP")) {
+      `If the file doesn't exist, or says NO_CDP_NEEDED, or has no CDP candidates,`,
+      `call the submit tool with: { "needed": false }`
+    ].join("\n"), { submit: true });
+    const cdpDecision = cdpCheck;
+    if (cdpDecision?.needed) {
       ctx.log(`CDP validation needed \u2014 running adversarial checks`);
       const cdpResult = await ctx.agent("validate", [
         `You are an ADVERSARIAL validator. Your goal is to DISPROVE that the implementation works.`,
@@ -521,7 +550,7 @@ ${lastOutput.slice(0, 1e4)}` : ""
         ``,
         `Plan path: ${planPath}`
       ].join("\n"));
-      if (cdpResult.output.includes("FAIL")) {
+      if (cdpResult.output.includes("FAIL") || cdpResult.output.includes("fail")) {
         ctx.log(`CDP validation found issues \u2014 attempting fixes`);
         await ctx.agent("implement", [
           `Fix the following CDP validation failures:`,
@@ -577,7 +606,7 @@ async function discoverLocalWorkflows(cwd) {
   const workflows = /* @__PURE__ */ new Map();
   if (!existsSync2(localDir)) return workflows;
   for await (const entry of glob("*.ts", { cwd: localDir })) {
-    const fullPath = resolve(localDir, entry);
+    const fullPath = resolve2(localDir, entry);
     const mod = await import(pathToFileURL(fullPath).href);
     workflows.set(mod.default.def.name, mod.default);
   }
@@ -765,7 +794,10 @@ if (command === "run") {
   try {
     await workflow.run(ctx, ...args);
   } catch (err) {
-    ctx.log(`Workflow "${name}" failed: ${err}`);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : void 0;
+    ctx.log(`Workflow "${name}" failed: ${message}`);
+    if (stack) process.stderr.write(stack + "\n");
     process.exit(1);
   }
   process.exit(0);

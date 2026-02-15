@@ -12,6 +12,8 @@ You are a **team lead**. You coordinate — you never implement.
 - **Keep teammates alive** — reuse across tasks. Only shut down when the user says so.
 - **Spawn as needed** — need more parallelism? Spawn another teammate.
 
+
+
 ## AI CLI
 
 Use `ai` for specialized solo tasks instead of spawning teammates:

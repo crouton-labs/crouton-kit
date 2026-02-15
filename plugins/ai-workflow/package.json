@@ -1,0 +1,15 @@
+{
+  "name": "@crouton-kit/ai-workflow",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "ai-workflow": "./dist/ai-workflow.mjs"
+  },
+  "scripts": {
+    "build": "node -e \"require('esbuild').buildSync({entryPoints:['src/cli.ts'],bundle:true,platform:'node',format:'esm',outfile:'dist/ai-workflow.mjs',banner:{js:'#!/usr/bin/env node'},packages:'external'})\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}

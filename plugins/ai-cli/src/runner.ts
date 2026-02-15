@@ -1,9 +1,47 @@
-import { query } from "@r-cli/sdk";
+import { writeFileSync } from "node:fs";
+import { query, createSdkMcpServer, tool } from "@r-cli/sdk";
+import { z } from "zod";
 import type { ModeConfig } from "./types.js";
 import { discoverPlugins } from "./plugins.js";
 
 interface RunOptions {
   headless: boolean;
+}
+
+function buildMcpServers(): Record<string, unknown> | undefined {
+  const servers: Record<string, unknown> = {};
+
+  // In-process submit server — triggered by AI_WORKFLOW_SUBMIT_PATH env var.
+  // Uses createSdkMcpServer (in-process) instead of a stdio subprocess to
+  // avoid the env-var whitelist and connection timeout issues with stdio MCP.
+  const submitPath = process.env.AI_WORKFLOW_SUBMIT_PATH;
+  if (submitPath) {
+    const server = createSdkMcpServer({
+      name: "submit",
+      version: "1.0.0",
+      tools: [
+        tool(
+          "submit",
+          "You MUST call this tool to return your structured output. " +
+          "Pass your result as the `data` parameter. Do not output JSON to stdout — use this tool instead.",
+          { data: z.string().describe("JSON-encoded structured result object to return.") },
+          async (args) => {
+            writeFileSync(submitPath, args.data);
+            return { content: [{ type: "text" as const, text: "Submitted successfully." }] };
+          },
+        ),
+      ],
+    });
+    servers.submit = server;
+  }
+
+  // Additional MCP servers from env (stdio/sse configs)
+  if (process.env.AI_MCP_SERVERS) {
+    const external = JSON.parse(process.env.AI_MCP_SERVERS) as Record<string, unknown>;
+    Object.assign(servers, external);
+  }
+
+  return Object.keys(servers).length > 0 ? servers : undefined;
 }
 
 export async function run(config: ModeConfig, prompt: string, cwd: string, options: RunOptions = { headless: false }): Promise<void> {
@@ -15,9 +53,7 @@ export async function run(config: ModeConfig, prompt: string, cwd: string, optio
     ? { type: "preset" as const, preset: "claude_code" as const, append: config.systemPromptContent }
     : config.systemPromptContent;
 
-  const mcpServers = process.env.AI_MCP_SERVERS
-    ? JSON.parse(process.env.AI_MCP_SERVERS) as Record<string, unknown>
-    : undefined;
+  const mcpServers = buildMcpServers();
 
   const result = query({
     prompt: finalPrompt,

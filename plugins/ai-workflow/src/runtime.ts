@@ -1,4 +1,4 @@
-import { execFile, exec, spawn } from "node:child_process";
+import { execFile, exec } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
@@ -87,17 +87,14 @@ export function createCtx(cwd: string, workflow?: string, args?: string[]): Ctx 
       const spawnCwd = opts?.cwd ? opts.cwd : cwd;
       const timeout = opts?.timeout;
 
-      // Submit mode: wire up MCP server + env vars
+      // Submit mode: set env var so the ai CLI creates an in-process submit server.
+      // The ai CLI's runner detects AI_WORKFLOW_SUBMIT_PATH and wires up a
+      // createSdkMcpServer-based submit tool that writes to this file.
       const submitFile = opts?.submit ? join(runDir, `submit-${randomUUID()}.json`) : undefined;
       const env: Record<string, string> = { ...process.env as Record<string, string> };
       if (submitFile) {
         writeFileSync(submitFile, "");
-        const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-        const serverPath = join(pluginRoot, "mcp", "submit-server.mjs");
         env.AI_WORKFLOW_SUBMIT_PATH = submitFile;
-        env.AI_MCP_SERVERS = JSON.stringify({
-          submit: { type: "stdio", command: "node", args: [serverPath] },
-        });
       }
 
       appendLog({ type: "agent", mode, prompt: prompt.slice(0, 500) });
@@ -163,15 +160,25 @@ export function createCtx(cwd: string, workflow?: string, args?: string[]): Ctx 
     },
 
     async dispatch(workflow: string, args: string[]): Promise<WorkflowHandle> {
-      const childRunId = randomUUID();
       appendLog({ type: "dispatch", mode: workflow, prompt: args.join(" ") });
-      const child = spawn("ai-workflow", ["run", workflow, ...args], {
+
+      const { stdout, stderr } = await execFileAsync("ai-workflow", ["run", workflow, ...args], {
         cwd,
-        detached: true,
-        stdio: "ignore",
+        maxBuffer: 10 * 1024 * 1024,
       });
-      child.unref();
-      return { runId: childRunId };
+      if (stderr) ctx.log(stderr);
+
+      // Child prints {"runId":"..."} to stdout on completion
+      let childRunId: string | undefined;
+      try {
+        const result = JSON.parse(stdout.trim()) as { runId?: string };
+        childRunId = result.runId;
+      } catch {
+        // Child may not have printed JSON (e.g. older version)
+      }
+
+      appendLog({ type: "dispatch", mode: workflow, output: stdout.slice(0, 1000) });
+      return { runId: childRunId ?? "unknown" };
     },
 
     ticket(id: string): TicketHandle {

@@ -8,13 +8,12 @@ import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync }
 import { glob } from "node:fs/promises";
 
 // src/runtime.ts
-import { execFile, exec, spawn } from "node:child_process";
+import { execFile, exec } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 var execFileAsync = promisify(execFile);
 var execAsync = promisify(exec);
 function parseJSON(raw, context) {
@@ -75,12 +74,7 @@ function createCtx(cwd, workflow, args) {
       const env = { ...process.env };
       if (submitFile) {
         writeFileSync(submitFile, "");
-        const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-        const serverPath = join(pluginRoot, "mcp", "submit-server.mjs");
         env.AI_WORKFLOW_SUBMIT_PATH = submitFile;
-        env.AI_MCP_SERVERS = JSON.stringify({
-          submit: { type: "stdio", command: "node", args: [serverPath] }
-        });
       }
       appendLog({ type: "agent", mode, prompt: prompt.slice(0, 500) });
       try {
@@ -137,15 +131,20 @@ function createCtx(cwd, workflow, args) {
       }
     },
     async dispatch(workflow2, args2) {
-      const childRunId = randomUUID();
       appendLog({ type: "dispatch", mode: workflow2, prompt: args2.join(" ") });
-      const child = spawn("ai-workflow", ["run", workflow2, ...args2], {
+      const { stdout, stderr } = await execFileAsync("ai-workflow", ["run", workflow2, ...args2], {
         cwd,
-        detached: true,
-        stdio: "ignore"
+        maxBuffer: 10 * 1024 * 1024
       });
-      child.unref();
-      return { runId: childRunId };
+      if (stderr) ctx.log(stderr);
+      let childRunId;
+      try {
+        const result = JSON.parse(stdout.trim());
+        childRunId = result.runId;
+      } catch {
+      }
+      appendLog({ type: "dispatch", mode: workflow2, output: stdout.slice(0, 1e3) });
+      return { runId: childRunId ?? "unknown" };
     },
     ticket(id) {
       if (!meta.ticketId) updateMeta({ ticketId: id });
@@ -798,8 +797,10 @@ if (command === "run") {
     const stack = err instanceof Error ? err.stack : void 0;
     ctx.log(`Workflow "${name}" failed: ${message}`);
     if (stack) process.stderr.write(stack + "\n");
+    process.stdout.write(JSON.stringify({ runId: ctx.runId }) + "\n");
     process.exit(1);
   }
+  process.stdout.write(JSON.stringify({ runId: ctx.runId }) + "\n");
   process.exit(0);
 }
 console.error(`Unknown command: ${command}. Run "ai-workflow --help" for usage.`);

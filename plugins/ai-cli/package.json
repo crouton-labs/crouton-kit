@@ -6,11 +6,12 @@
     "ai": "./dist/ai.mjs"
   },
   "scripts": {
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/ai.mjs --banner:js='#!/usr/bin/env node' --external:@r-cli/sdk",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/ai.mjs --banner:js='#!/usr/bin/env node' --external:@r-cli/sdk --external:zod",
     "dev": "npm run build && node dist/ai.mjs"
   },
   "dependencies": {
-    "@r-cli/sdk": "^1.1.117"
+    "@r-cli/sdk": "^1.1.117",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -269,9 +269,13 @@ if (command === "run") {
     const stack = err instanceof Error ? err.stack : undefined;
     ctx.log(`Workflow "${name}" failed: ${message}`);
     if (stack) process.stderr.write(stack + "\n");
+    // Print run ID so parent dispatch can capture it
+    process.stdout.write(JSON.stringify({ runId: ctx.runId }) + "\n");
     process.exit(1);
   }
 
+  // Print run ID so parent dispatch can capture it
+  process.stdout.write(JSON.stringify({ runId: ctx.runId }) + "\n");
   process.exit(0);
 }
 

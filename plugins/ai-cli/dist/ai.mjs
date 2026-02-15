@@ -75,7 +75,9 @@ function listModes(cwd) {
 }
 
 // src/runner.ts
-import { query } from "@r-cli/sdk";
+import { writeFileSync } from "node:fs";
+import { query, createSdkMcpServer, tool } from "@r-cli/sdk";
+import { z } from "zod";
 
 // src/plugins.ts
 import { readFileSync as readFileSync2 } from "node:fs";
@@ -108,10 +110,37 @@ function discoverPlugins() {
 }
 
 // src/runner.ts
+function buildMcpServers() {
+  const servers = {};
+  const submitPath = process.env.AI_WORKFLOW_SUBMIT_PATH;
+  if (submitPath) {
+    const server = createSdkMcpServer({
+      name: "submit",
+      version: "1.0.0",
+      tools: [
+        tool(
+          "submit",
+          "You MUST call this tool to return your structured output. Pass your result as the `data` parameter. Do not output JSON to stdout \u2014 use this tool instead.",
+          { data: z.string().describe("JSON-encoded structured result object to return.") },
+          async (args) => {
+            writeFileSync(submitPath, args.data);
+            return { content: [{ type: "text", text: "Submitted successfully." }] };
+          }
+        )
+      ]
+    });
+    servers.submit = server;
+  }
+  if (process.env.AI_MCP_SERVERS) {
+    const external = JSON.parse(process.env.AI_MCP_SERVERS);
+    Object.assign(servers, external);
+  }
+  return Object.keys(servers).length > 0 ? servers : void 0;
+}
 async function run(config2, prompt, cwd, options = { headless: false }) {
   const finalPrompt = config2.promptWrapper ? config2.promptWrapper.replace("{{prompt}}", prompt) : prompt;
   const systemPrompt = config2.systemPromptMode === "append" ? { type: "preset", preset: "claude_code", append: config2.systemPromptContent } : config2.systemPromptContent;
-  const mcpServers = process.env.AI_MCP_SERVERS ? JSON.parse(process.env.AI_MCP_SERVERS) : void 0;
+  const mcpServers = buildMcpServers();
   const result = query({
     prompt: finalPrompt,
     options: {

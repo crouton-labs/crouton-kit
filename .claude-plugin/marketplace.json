@@ -132,6 +132,19 @@
         "modes",
         "automation"
       ]
+    },
+    {
+      "name": "capture",
+      "source": "./plugins/capture",
+      "description": "Generic app state capture — screenshots, HAR, console, logs via CDP",
+      "version": "1.0.0",
+      "keywords": [
+        "cdp",
+        "capture",
+        "screenshots",
+        "validation",
+        "testing"
+      ]
     }
   ]
 }

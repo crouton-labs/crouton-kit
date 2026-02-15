@@ -1,0 +1,19 @@
+{
+  "name": "@crouton-kit/capture",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "capture": "./dist/capture.mjs"
+  },
+  "scripts": {
+    "build": "esbuild src/capture.ts --bundle --platform=node --format=esm --outfile=dist/capture.mjs --banner:js='#!/usr/bin/env node' --packages=external"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}

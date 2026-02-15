@@ -1,0 +1,5 @@
+{
+  "name": "capture",
+  "version": "1.0.0",
+  "description": "Generic app state capture — screenshots, HAR, console, logs via CDP"
+}

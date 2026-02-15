@@ -108,7 +108,7 @@ function discoverPlugins() {
 }
 
 // src/runner.ts
-async function run(config2, prompt, cwd) {
+async function run(config2, prompt, cwd, options = { headless: false }) {
   const finalPrompt = config2.promptWrapper ? config2.promptWrapper.replace("{{prompt}}", prompt) : prompt;
   const systemPrompt = config2.systemPromptMode === "append" ? { type: "preset", preset: "claude_code", append: config2.systemPromptContent } : config2.systemPromptContent;
   const result = query({
@@ -124,18 +124,36 @@ async function run(config2, prompt, cwd) {
       plugins: discoverPlugins()
     }
   });
+  let outputBuffer = "";
   for await (const message of result) {
     if (message.type === "stream_event") {
       const event = message.event;
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        process.stdout.write(event.delta.text);
+        if (options.headless) {
+          outputBuffer += event.delta.text;
+        } else {
+          process.stdout.write(event.delta.text);
+        }
       }
     } else if (message.type === "result") {
-      if (message.subtype !== "success") {
-        process.stderr.write(`
+      if (options.headless) {
+        const isError = message.subtype !== "success";
+        const errors = "errors" in message ? message.errors : [];
+        process.stdout.write(JSON.stringify({
+          sessionId: message.session_id,
+          output: isError ? errors.join(", ") : outputBuffer,
+          exitCode: isError ? 1 : 0
+        }) + "\n");
+        if (isError) {
+          process.exitCode = 1;
+        }
+      } else {
+        if (message.subtype !== "success") {
+          process.stderr.write(`
 Errors: ${("errors" in message ? message.errors : []).join(", ")}
 `);
-        process.exitCode = 1;
+          process.exitCode = 1;
+        }
       }
     }
   }
@@ -146,6 +164,7 @@ var { values } = parseArgs({
   options: {
     mode: { type: "string", short: "m", default: "general" },
     prompt: { type: "string", short: "p" },
+    headless: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
     list: { type: "boolean", short: "l", default: false }
   },
@@ -170,6 +189,7 @@ Usage:
 Options:
   -m, --mode <name>    Mode to use (default: general)
   -p, --prompt <text>  Prompt to send
+  --headless           Suppress streaming, output JSON on completion
   -l, --list           List available modes
   -h, --help           Show this help
 
@@ -188,4 +208,4 @@ if (!values.prompt) {
   process.exit(1);
 }
 var config = loadMode(values.mode, process.cwd());
-await run(config, values.prompt, process.cwd());
+await run(config, values.prompt, process.cwd(), { headless: values.headless });

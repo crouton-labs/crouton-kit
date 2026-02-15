@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4-5-20250929
+model: claude-opus-4-6
 system-prompt-mode: append
 help: General-purpose prompt. Pass any task description.
 ---

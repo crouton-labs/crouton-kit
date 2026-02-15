@@ -6,6 +6,7 @@ const { values } = parseArgs({
   options: {
     mode: { type: "string", short: "m", default: "general" },
     prompt: { type: "string", short: "p" },
+    headless: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
     list: { type: "boolean", short: "l", default: false },
   },
@@ -32,6 +33,7 @@ Usage:
 Options:
   -m, --mode <name>    Mode to use (default: general)
   -p, --prompt <text>  Prompt to send
+  --headless           Suppress streaming, output JSON on completion
   -l, --list           List available modes
   -h, --help           Show this help
 
@@ -53,4 +55,4 @@ if (!values.prompt) {
 }
 
 const config = loadMode(values.mode!, process.cwd());
-await run(config, values.prompt, process.cwd());
+await run(config, values.prompt, process.cwd(), { headless: values.headless! });

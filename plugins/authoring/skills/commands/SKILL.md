@@ -36,12 +36,23 @@ Bash execution requires matching `allowed-tools` declarations.
 4. **Limit allowed-tools** — only enable what's needed
 5. **One concern** — focused commands, not kitchen sinks
 
-## Optional Frontmatter
+## Invocation Control
+
+Most commands should be **user-only** or **agent-only** — rarely both.
+
+| Field | Who can invoke | Description in context | Use when |
+|-------|---------------|----------------------|----------|
+| *(default)* | User + Agent | Yes | Rare — general-purpose commands |
+| `disable-model-invocation: true` | User only | **No** | Actions with side effects (commit, deploy, send) |
+| `user-invocable: false` | Agent only | Yes | Background knowledge, auto-applied patterns |
+
+**Default to `disable-model-invocation: true`** for most commands. Agent auto-invocation is a footgun — commands that modify state, run tools, or trigger workflows should require explicit user intent. Reserve agent-invocable commands for read-only reference or context-injection where autonomous discovery is the point.
+
+## Other Frontmatter
 
 | Field | Purpose |
 |-------|---------|
 | `model` | Override model (haiku for cheap, opus for capability) |
-| `disable-model-invocation: true` | Only invokable by user, not autonomously |
 | `argument-hint` | Document expected args for autocomplete |
 
 ## When to Use Commands vs Skills

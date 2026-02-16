@@ -46,6 +46,12 @@ import {
   createHarRecording,
   deleteHarRecording,
 } from './har-manager.js';
+import {
+  getActiveSession,
+  updateActiveSession,
+  nextStepPath,
+} from './session-context.js';
+import { clickByName, typeText, focusAndType } from './interact.js';
 
 // ============================================================================
 // Types
@@ -76,6 +82,9 @@ interface ParsedArgs {
   har?: string;
   new?: boolean;
   target?: string;
+  role?: string;
+  into?: string;
+  noScreenshot?: boolean;
 }
 
 interface NetworkRequest {
@@ -375,12 +384,27 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     } else if (arg === '--target' && next) {
       parsed.target = next;
       i++;
+    } else if (arg === '--role' && next) {
+      parsed.role = next;
+      i++;
+    } else if (arg === '--into' && next) {
+      parsed.into = next;
+      i++;
+    } else if (arg === '--no-screenshot') {
+      parsed.noScreenshot = true;
     } else if (arg.startsWith('--')) {
       console.error(`Unknown flag: ${arg}`);
       process.exit(1);
     } else {
       positional.push(arg);
     }
+  }
+
+  // Fill gaps from active session context (explicit flags always win)
+  const session = getActiveSession();
+  if (session) {
+    if (!parsed.har && session.harId) parsed.har = session.harId;
+    if (!parsed.target && !parsed.url && session.targetId) parsed.target = session.targetId;
   }
 
   return parsed as ParsedArgs;
@@ -423,6 +447,12 @@ async function connectForCommand(
 
   if (!tab.webSocketDebuggerUrl) {
     throw new Error('Tab has no WebSocket debugger URL');
+  }
+
+  // Lazy-populate targetId in active session if not yet set
+  const activeSession = getActiveSession();
+  if (activeSession && !activeSession.targetId) {
+    updateActiveSession({ targetId: tab.id });
   }
 
   const client = new CDPClient(tab.webSocketDebuggerUrl);
@@ -1417,6 +1447,28 @@ export async function withTabLock<T>(
 }
 
 // ============================================================================
+// Auto-Screenshot Helper
+// ============================================================================
+
+async function autoScreenshot(
+  client: CDPClient,
+  action: string,
+  label: string,
+  noScreenshot?: boolean,
+): Promise<string | null> {
+  if (noScreenshot) return null;
+  const shotPath = nextStepPath(action, label);
+  if (!shotPath) return null;
+
+  // Brief settle for UI to update
+  await new Promise((r) => setTimeout(r, 300));
+  const png = await captureScreenshot(client);
+  fs.writeFileSync(shotPath, png);
+  console.error(`  [screenshot] ${shotPath}`);
+  return shotPath;
+}
+
+// ============================================================================
 // CLI
 // ============================================================================
 
@@ -1612,11 +1664,56 @@ async function main() {
           const png = await captureScreenshot(client);
           const outPath = parsed.out
             ? parsed.out
-            : `/tmp/capture-screenshot-${Date.now()}.png`;
+            : (nextStepPath('screenshot', 'manual') ?? `/tmp/capture-screenshot-${Date.now()}.png`);
           fs.writeFileSync(outPath, png);
           return { path: outPath, bytes: png.length };
         },
         { settle: 0 },
+      );
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+
+    case 'click': {
+      const name = parsed.positional[0];
+      if (!name) {
+        console.error('Usage: capture click "name" [--role button|link|...] [--no-screenshot]');
+        process.exit(1);
+      }
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          const clickResult = await clickByName(client, name, parsed.role);
+          const screenshot = await autoScreenshot(client, 'click', name, parsed.noScreenshot);
+          return { ...clickResult, screenshot };
+        },
+        { settle: 1000 },
+      );
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+
+    case 'type': {
+      const text = parsed.positional[0];
+      if (!text) {
+        console.error('Usage: capture type "text" [--into "field name"] [--no-screenshot]');
+        process.exit(1);
+      }
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          let field: string | null = null;
+          if (parsed.into) {
+            await focusAndType(client, parsed.into, text);
+            field = parsed.into;
+          } else {
+            await typeText(client, text);
+          }
+          const label = field ?? text;
+          const screenshot = await autoScreenshot(client, 'type', label, parsed.noScreenshot);
+          return { typed: text, field, screenshot };
+        },
+        { settle: 500 },
       );
       console.log(JSON.stringify(result, null, 2));
       break;
@@ -1705,7 +1802,7 @@ async function main() {
     }
 
     default:
-      console.log(`CDP — exec-first browser automation. The agent writes JS, not CLI args.
+      console.log(`CDP — browser automation via exec, a11y interactions, and screenshots.
 
 Commands:
   exec <code>         Execute JavaScript in a browser tab
@@ -1714,6 +1811,8 @@ Commands:
   list                List all browser tabs
   open <url>          Open URL in browser (returns tab ID)
   screenshot          Capture screenshot
+  click "name"        Click element by accessible name
+  type "text"         Type text into focused element
   a11y                Get accessibility tree
   record              Passive HAR recording
   navigate <url>      Navigate to URL and record HAR
@@ -1735,6 +1834,9 @@ Options:
   --out <path>        Output path (screenshot)
   --json              JSON output (a11y)
   --interactive       Interactive elements only (a11y)
+  --role <role>       ARIA role filter (click)
+  --into "field"      Target field by name (type)
+  --no-screenshot     Skip auto-screenshot (click, type)
 
 Console output (errors, warnings) is always captured and printed to stderr.
 
@@ -1757,8 +1859,12 @@ Examples:
   }
 }
 
-// Only run CLI when executed directly (not imported)
-const isMainModule = process.argv[1]?.endsWith('cdp.ts');
+export { main as cdpMain };
+
+// Only run CLI when executed directly (not imported via capture.ts)
+const isMainModule =
+  process.argv[1]?.endsWith('cdp.ts') ||
+  process.argv[1]?.endsWith('cdp.mjs');
 if (isMainModule) {
   main()
     .then(() => {

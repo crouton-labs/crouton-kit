@@ -33,4 +33,14 @@ Interpret the user's request and translate it into `ai-workflow` commands. Extra
 - "what's running" → `ai-workflow runs`
 - "status on that last run" → `ai-workflow runs --last 1` then `ai-workflow status <id>`
 
+## Ticket quality gate
+
+Before running a workflow, read the ticket. If it's too sparse to act on (no description, vague one-liner, missing acceptance criteria for non-trivial work), **stop and discuss** with the user instead of blindly running. Call out what's missing and ask whether to proceed anyway or flesh it out first.
+
+## Subtask rules
+
+When breaking a ticket into smaller tasks/subtasks:
+- Keep subtasks on the **same project** as the parent ticket
+- Assign subtasks to **me** if not already assigned
+
 User request: $ARGUMENTS

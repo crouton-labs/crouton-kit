@@ -1,37 +1,58 @@
-#!/usr/bin/env tsx
 /**
- * Capture session manager — thin wrapper over a project's CDP CLI.
+ * Capture — unified CLI for session management and CDP browser automation.
  *
- * Usage:
- *   capture start --cdp <cdp-command> [--url <url>]
- *   capture stop <session-id>
- *   capture list
- *   capture view <session-id> [--filter screenshots|har|a11y]
+ * Session commands (namespaced):
+ *   capture session start [--url <url>]
+ *   capture session stop <session-id>
+ *   capture session list
+ *   capture session view <session-id> [--filter screenshots|har|a11y]
+ *   capture log <path> [--name label]
  *
- * Between start and stop, use your project's CDP CLI directly.
- * Route artifacts into the session:
- *   - Screenshots: --out $CAPTURE_DIR/shots/<label>.png
- *   - HAR:         --har $CAPTURE_HAR_ID (printed by start)
- *   - A11y:        redirect output to $CAPTURE_DIR/a11y/<label>.json
- *
- * On stop, all artifacts are collected into a bundle manifest at
- * $CAPTURE_DIR/bundle.json that the agent can read and filter.
+ * CDP commands (top-level):
+ *   capture detect              Detect CDP port
+ *   capture exec <code>         Execute JS in a tab
+ *   capture list                List browser tabs
+ *   capture open <url>          Open URL in browser
+ *   capture screenshot          Capture screenshot
+ *   capture a11y                Get accessibility tree
+ *   capture record              Passive HAR recording
+ *   capture navigate <url>      Navigate + record HAR
+ *   capture har create|read|delete  Manage HAR recordings
  */
 
-import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { spawn } from "child_process";
+import {
+  createHarRecording,
+  readHarRecording,
+  deleteHarRecording,
+} from "./har-manager.js";
+import { cdpMain } from "./cdp.js";
+import {
+  getActiveSession,
+  setActiveSession,
+  clearActiveSession,
+} from "./session-context.js";
 
 const CAPTURE_ROOT = path.join(os.tmpdir(), "capture-sessions");
+
+interface LogPid {
+  pid: number;
+  name: string;
+  sourcePath: string;
+}
 
 interface Session {
   id: string;
   dir: string;
   harId: string | null;
-  cdpCommand: string;
   startedAt: string;
   url: string | null;
+  targetId: string | null;
+  stepCount: number;
+  logPids: LogPid[];
 }
 
 interface BundleManifest {
@@ -43,6 +64,7 @@ interface BundleManifest {
   screenshots: Array<{ name: string; path: string }>;
   har: { id: string; path: string; entryCount: number } | null;
   a11y: Array<{ name: string; path: string }>;
+  logs: Array<{ name: string; path: string; lines: number }>;
   other: Array<{ name: string; path: string }>;
 }
 
@@ -62,29 +84,19 @@ function readSession(id: string): Session {
   return JSON.parse(fs.readFileSync(metaPath, "utf-8")) as Session;
 }
 
-function cdp(session: Session, args: string): string {
-  return execSync(`${session.cdpCommand} ${args}`, {
-    encoding: "utf-8",
-    timeout: 30_000,
-  }).trim();
-}
-
 function generateId(): string {
   return `cap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 // ============================================================================
-// Commands
+// Session Commands
 // ============================================================================
 
-function start(args: string[]): void {
-  let cdpCommand = "cdp";
+async function start(args: string[]): Promise<void> {
   let url: string | null = null;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--cdp" && args[i + 1]) {
-      cdpCommand = args[++i];
-    } else if (args[i] === "--url" && args[i + 1]) {
+    if (args[i] === "--url" && args[i + 1]) {
       url = args[++i];
     }
   }
@@ -94,32 +106,55 @@ function start(args: string[]): void {
   fs.mkdirSync(path.join(dir, "shots"), { recursive: true });
   fs.mkdirSync(path.join(dir, "a11y"), { recursive: true });
 
-  // Start HAR recording via project CDP
+  // Start HAR recording directly
   let harId: string | null = null;
   try {
-    const harResult = JSON.parse(cdp({ id, dir, harId: null, cdpCommand, startedAt: "", url }, "har create")) as {
-      id: string;
-    };
+    const harResult = createHarRecording();
     harId = harResult.id;
   } catch (err) {
     console.error(`Warning: could not start HAR recording: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Open tab if URL provided
+  let targetId: string | null = null;
+  if (url) {
+    try {
+      const { detectCdpPort, navigateAndWait } = await import('./cdp.js');
+      const port = await detectCdpPort();
+      const tab = await navigateAndWait(port, url);
+      targetId = tab.id;
+    } catch (err) {
+      console.error(`Warning: could not open tab: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   const session: Session = {
     id,
     dir,
     harId,
-    cdpCommand,
     startedAt: new Date().toISOString(),
     url,
+    targetId,
+    stepCount: 0,
+    logPids: [],
   };
   fs.writeFileSync(sessionMetaPath(id), JSON.stringify(session, null, 2));
+
+  // Set as active session for auto-defaults
+  setActiveSession({
+    sessionId: id,
+    dir,
+    harId,
+    targetId,
+    stepCount: 0,
+  });
 
   // Output for agent consumption
   const result = {
     sessionId: id,
     bundleDir: dir,
     harId,
+    targetId,
     shotsDir: path.join(dir, "shots"),
     a11yDir: path.join(dir, "a11y"),
   };
@@ -127,16 +162,67 @@ function start(args: string[]): void {
 
   // Agent-friendly next steps on stderr
   console.error(`\nCapture session started: ${id}`);
-  console.error(`\nUse your CDP CLI with these flags:`);
-  if (harId) console.error(`  --har ${harId}`);
-  console.error(`  --out ${dir}/shots/<label>.png  (for screenshots)`);
-  console.error(`\nWhen done: capture stop ${id}`);
+  if (targetId) {
+    console.error(`Tab opened — session context active. No need to pass --target or --har.`);
+  }
+  console.error(`\nWhen done: capture session stop ${id}`);
 }
 
-function stop(args: string[]): void {
+function logCommand(args: string[]): void {
+  const sourcePath = args[0];
+  if (!sourcePath) {
+    console.error("Usage: capture log <path> [--name label] [--session <id>]");
+    process.exit(1);
+  }
+
+  const resolved = path.resolve(sourcePath);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`Log file not found: ${resolved}`);
+  }
+
+  let name: string | null = null;
+  let sessionId: string | null = null;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--name" && args[i + 1]) name = args[++i];
+    if (args[i] === "--session" && args[i + 1]) sessionId = args[++i];
+  }
+
+  if (!sessionId) {
+    const active = getActiveSession();
+    if (!active) {
+      throw new Error("No active capture session. Start one or pass --session <id>.");
+    }
+    sessionId = active.sessionId;
+  }
+
+  const session = readSession(sessionId);
+  name = name ?? path.basename(resolved, path.extname(resolved));
+
+  const logsDir = path.join(session.dir, "logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+
+  const destPath = path.join(logsDir, `${name}.log`);
+  const outFd = fs.openSync(destPath, "a");
+
+  const child = spawn(
+    "sh",
+    ["-c", `tail -f "${resolved}" | perl -MPOSIX -ne 'print strftime("%Y-%m-%dT%H:%M:%SZ",gmtime())." ".$_'`],
+    { detached: true, stdio: ["ignore", outFd, "ignore"] },
+  );
+  child.unref();
+  fs.closeSync(outFd);
+
+  const pid = child.pid!;
+  session.logPids.push({ pid, name, sourcePath: resolved });
+  fs.writeFileSync(sessionMetaPath(session.id), JSON.stringify(session, null, 2));
+
+  console.log(JSON.stringify({ name, sourcePath: resolved, destPath, pid }, null, 2));
+}
+
+async function stop(args: string[]): Promise<void> {
   const id = args[0];
   if (!id) {
-    console.error("Usage: capture stop <session-id>");
+    console.error("Usage: capture session stop <session-id>");
     process.exit(1);
   }
 
@@ -144,6 +230,14 @@ function stop(args: string[]): void {
   const stoppedAt = new Date().toISOString();
   const startMs = new Date(session.startedAt).getTime();
   const duration = Date.now() - startMs;
+
+  // Kill log tailers
+  for (const lp of session.logPids ?? []) {
+    try { process.kill(-lp.pid, "SIGTERM"); } catch { /* already dead */ }
+  }
+  if (session.logPids?.length) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
 
   // Collect screenshots
   const shotsDir = path.join(session.dir, "shots");
@@ -161,28 +255,45 @@ function stop(args: string[]): void {
         .map((f) => ({ name: f, path: path.join(a11yDir, f) }))
     : [];
 
-  // Collect HAR
+  // Collect HAR directly from har-manager
   let har: BundleManifest["har"] = null;
   if (session.harId) {
     try {
-      const harJson = cdp(session, `har read ${session.harId}`);
-      const harPath = path.join(session.dir, "har.json");
-      fs.writeFileSync(harPath, harJson);
-      const harData = JSON.parse(harJson) as { log: { entries: unknown[] } };
-      har = { id: session.harId, path: harPath, entryCount: harData.log.entries.length };
-      // Clean up the HAR recording
-      try { cdp(session, `har delete ${session.harId}`); } catch { /* best effort */ }
+      const harData = readHarRecording(session.harId);
+      if (harData) {
+        const harPath = path.join(session.dir, "har.json");
+        fs.writeFileSync(harPath, JSON.stringify(harData, null, 2));
+        har = { id: session.harId, path: harPath, entryCount: harData.log.entries.length };
+        // Clean up the HAR recording
+        try { deleteHarRecording(session.harId); } catch { /* best effort */ }
+      }
     } catch (err) {
       console.error(`Warning: could not read HAR: ${err instanceof Error ? err.message : err}`);
     }
   }
 
+  // Collect log files
+  const logsDir = path.join(session.dir, "logs");
+  const logs = fs.existsSync(logsDir)
+    ? fs.readdirSync(logsDir)
+        .filter((f) => f.endsWith(".log"))
+        .map((f) => {
+          const filePath = path.join(logsDir, f);
+          const content = fs.readFileSync(filePath, "utf-8");
+          const lines = content ? content.split("\n").filter(Boolean).length : 0;
+          return { name: f, path: filePath, lines };
+        })
+    : [];
+
   // Collect anything else dropped in the session dir
-  const knownDirs = new Set(["shots", "a11y"]);
+  const knownDirs = new Set(["shots", "a11y", "logs"]);
   const knownFiles = new Set([".session.json", "har.json", "bundle.json"]);
   const other = fs.readdirSync(session.dir)
     .filter((f) => !knownDirs.has(f) && !knownFiles.has(f))
     .map((f) => ({ name: f, path: path.join(session.dir, f) }));
+
+  // Clear active session context
+  clearActiveSession();
 
   const manifest: BundleManifest = {
     id: session.id,
@@ -193,6 +304,7 @@ function stop(args: string[]): void {
     screenshots,
     har,
     a11y,
+    logs,
     other,
   };
 
@@ -206,12 +318,13 @@ function stop(args: string[]): void {
       screenshots: screenshots.length,
       harEntries: har?.entryCount ?? 0,
       a11ySnapshots: a11y.length,
+      logFiles: logs.length,
       otherFiles: other.length,
     },
   }, null, 2));
 
   console.error(`\nBundle written: ${bundlePath}`);
-  console.error(`Read it: capture view ${id}`);
+  console.error(`Read it: capture session view ${id}`);
 }
 
 function list(): void {
@@ -234,7 +347,7 @@ function list(): void {
 function view(args: string[]): void {
   const id = args[0];
   if (!id) {
-    console.error("Usage: capture view <session-id> [--filter screenshots|har|a11y]");
+    console.error("Usage: capture session view <session-id> [--filter screenshots|har|a11y]");
     process.exit(1);
   }
 
@@ -242,7 +355,7 @@ function view(args: string[]): void {
   const bundlePath = path.join(session.dir, "bundle.json");
 
   if (!fs.existsSync(bundlePath)) {
-    console.error(`Session ${id} hasn't been stopped yet. Run: capture stop ${id}`);
+    console.error(`Session ${id} hasn't been stopped yet. Run: capture session stop ${id}`);
     process.exit(1);
   }
 
@@ -257,39 +370,112 @@ function view(args: string[]): void {
   }
 }
 
+async function sessionMain(args: string[]): Promise<void> {
+  const [subcommand, ...rest] = args;
+
+  switch (subcommand) {
+    case "start": return start(rest);
+    case "stop": return stop(rest);
+    case "list": return list();
+    case "view": return view(rest);
+    default:
+      console.log(`capture session — manage capture sessions
+
+Commands:
+  start [--url <url>]                Start a capture session
+  stop <session-id>                  Finalize and bundle all artifacts
+  list                               List active and stopped sessions
+  view <id> [--filter section]       View bundle manifest
+  log <path> [--name label]          Tail a log file into the session
+
+Workflow:
+  1. capture session start --url http://localhost:3000
+  2. Use CDP commands directly:
+       capture screenshot --url localhost --out $CAPTURE_DIR/shots/homepage.png --har $HAR_ID
+       capture exec "document.querySelector('.btn').click()" --url localhost --har $HAR_ID
+       capture a11y --url localhost --json > $CAPTURE_DIR/a11y/after-login.json
+  3. capture session stop <session-id>
+  4. capture session view <session-id>`);
+  }
+}
+
 // ============================================================================
 // CLI
 // ============================================================================
 
-function main(): void {
+async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
 
   switch (command) {
-    case "start": return start(args);
-    case "stop": return stop(args);
-    case "list": return list();
-    case "view": return view(args);
+    case "session":
+      return sessionMain(args);
+
+    case "log":
+      return logCommand(args);
+
+    // CDP commands — delegate to cdp.ts
+    case "detect":
+    case "exec":
+    case "open":
+    case "screenshot":
+    case "click":
+    case "type":
+    case "a11y":
+    case "record":
+    case "navigate":
+    case "har":
+    case "list":
+      cdpMain();
+      return;
+
     default:
-      console.log(`Capture — session manager for CDP-based app observation
+      console.log(`Capture — session management and CDP browser automation
 
-Commands:
-  start [--cdp <cmd>] [--url <url>]   Start a capture session
-  stop <session-id>                     Finalize and bundle all artifacts
-  list                                  List active and stopped sessions
-  view <id> [--filter section]          View bundle manifest
+Session commands:
+  session start [--url <url>]        Start a capture session
+  session stop <session-id>          Finalize and bundle all artifacts
+  session list                       List active and stopped sessions
+  session view <id> [--filter ...]   View bundle manifest
+  log <path> [--name label]          Tail a log file into the session
 
-Workflow:
-  1. capture start --cdp "pnpm tsx lib-pipeline/cdp/index.ts" --url http://localhost:3000
-  2. Use your CDP CLI directly — route outputs into the session:
-       cdp screenshot --url localhost --out $CAPTURE_DIR/shots/homepage.png --har $HAR_ID
-       cdp click "text=Login" --url localhost --har $HAR_ID
-       cdp a11y --url localhost --json > $CAPTURE_DIR/a11y/after-login.json
-  3. capture stop <session-id>
-  4. capture view <session-id>
+CDP commands:
+  detect                             Detect CDP port
+  exec <code>                        Execute JS in a browser tab
+  exec --file <path>                 Execute JS from file
+  list                               List all browser tabs
+  open <url>                         Open URL in browser
+  screenshot                         Capture screenshot
+  click "name"                       Click element by accessible name
+  type "text"                        Type text into focused element
+  a11y                               Get accessibility tree
+  record                             Passive HAR recording
+  navigate <url>                     Navigate to URL and record HAR
+  har create|read|delete             Manage HAR recordings
 
-The bundle manifest at $CAPTURE_DIR/bundle.json indexes all artifacts
-for agent consumption. Filter with --filter: screenshots, har, a11y, other.`);
+Options (CDP):
+  --port <port>       Override CDP port
+  --target <tabId>    Target tab by exact ID (preferred, parallel-safe)
+  --url <pattern>     Target tab by URL pattern (fuzzy match)
+  --har <id>          Append traffic to a HAR recording
+  --out <path>        Output path (screenshot)
+  --json              JSON output (a11y)
+  --interactive       Interactive elements only (a11y)
+  --role <role>       ARIA role filter (click)
+  --into "field"      Target field by name (type)
+  --no-screenshot     Skip auto-screenshot (click, type)
+
+Examples:
+  capture session start --url http://localhost:3000
+  capture session stop <session-id>
+  capture detect
+  capture list
+  capture exec "document.title" --url example
+  capture screenshot --url example --out /tmp/shot.png
+  capture a11y --url example --interactive`);
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});

@@ -157,6 +157,17 @@
         "automation",
         "linear"
       ]
+    },
+    {
+      "name": "sisyphus",
+      "source": "./plugins/sisyphus",
+      "description": "Orchestration agents and workflow patterns for sisyphus multi-agent sessions",
+      "version": "1.0.0",
+      "keywords": [
+        "orchestration",
+        "multi-agent",
+        "workflow"
+      ]
     }
   ]
 }

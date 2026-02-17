@@ -1,0 +1,8 @@
+{
+  "name": "sisyphus",
+  "version": "1.0.0",
+  "description": "Orchestration agents and workflow patterns for sisyphus multi-agent sessions",
+  "author": {
+    "name": "Silas Rhyneer"
+  }
+}

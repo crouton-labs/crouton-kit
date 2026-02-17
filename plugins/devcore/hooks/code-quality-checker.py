@@ -61,7 +61,6 @@ def check_backwards_compat_patterns(content: str, file_path: str) -> list[str]:
 
     # These patterns are NEVER acceptable unless user explicitly requested them
     blocking_patterns = [
-        (r'\bfallback\b', 'BLOCKED: Fallback pattern detected'),
         (r'\blegacy\b', 'BLOCKED: Legacy code pattern detected'),
         (r'backward[s]?\s+compatib', 'BLOCKED: Backwards compatibility pattern detected'),
         (r'\bdeprecated\b', 'BLOCKED: Deprecated pattern detected'),

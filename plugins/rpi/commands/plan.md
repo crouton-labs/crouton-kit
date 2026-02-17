@@ -1,7 +1,6 @@
 ---
 description: After /rpi/arch - create implementation plan from spec
 argument-hint: <spec-path or description>
-disable-model-invocation: true
 ---
 # Create Implementation Plan
 

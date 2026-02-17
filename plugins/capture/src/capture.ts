@@ -424,9 +424,9 @@ async function main(): Promise<void> {
     case "record":
     case "navigate":
     case "har":
+    case "network":
     case "list":
-      cdpMain();
-      return;
+      return cdpMain();
 
     default:
       console.log(`Capture — session management and CDP browser automation
@@ -450,6 +450,7 @@ CDP commands:
   a11y                               Get accessibility tree
   record                             Passive HAR recording
   navigate <url>                     Navigate to URL and record HAR
+  network <offline|online>           Toggle network (simulate disconnect)
   har create|read|delete             Manage HAR recordings
 
 Options (CDP):

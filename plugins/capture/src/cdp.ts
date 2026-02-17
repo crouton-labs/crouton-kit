@@ -85,6 +85,7 @@ interface ParsedArgs {
   role?: string;
   into?: string;
   noScreenshot?: boolean;
+  help?: boolean;
 }
 
 interface NetworkRequest {
@@ -392,6 +393,8 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       i++;
     } else if (arg === '--no-screenshot') {
       parsed.noScreenshot = true;
+    } else if (arg === '--help' || arg === '-h') {
+      parsed.help = true;
     } else if (arg.startsWith('--')) {
       console.error(`Unknown flag: ${arg}`);
       process.exit(1);
@@ -1478,6 +1481,14 @@ async function main() {
 
   switch (parsed.command) {
     case 'detect': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture detect\n\n' +
+            'Detect CDP port (prioritizes default browser).\n' +
+            'Returns JSON with port, app name, and all discovered endpoints.',
+        );
+        process.exit(0);
+      }
       const endpoints = await detectCdpPortsAsync();
       if (endpoints.length === 0) {
         console.error(
@@ -1520,6 +1531,14 @@ async function main() {
     }
 
     case 'list': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture list [--port <port>]\n\n' +
+            'List all browser tabs on the CDP port.\n' +
+            'Returns JSON array of {id, title, url}.',
+        );
+        process.exit(0);
+      }
       const p = parsed.port ?? (await detectCdpPort());
       const targets = await listTargets(p);
       const pages = targets.filter((t) => t.type === 'page');
@@ -1537,6 +1556,14 @@ async function main() {
     }
 
     case 'open': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture open <url> [--new] [--port <port>]\n\n' +
+            'Open URL in browser (returns tab ID).\n\n' +
+            'Example: capture open "https://app.example.com" --new',
+        );
+        process.exit(0);
+      }
       const url = parsed.positional[0];
       if (!url) {
         console.error(
@@ -1564,6 +1591,18 @@ async function main() {
     }
 
     case 'exec': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture exec <code> [--url <pattern>] [--target <id>] [--record] [--file <path>] [--har <id>]\n\n' +
+            'Execute JavaScript in a browser tab. Supports await (wrapped in async IIFE).\n\n' +
+            'Examples:\n' +
+            '  capture exec "document.title" --url example\n' +
+            '  capture exec "await fetch(\'/api/data\').then(r=>r.json())" --url example\n' +
+            '  capture exec "document.querySelector(\'.btn\').click()" --target <id>\n' +
+            '  capture exec --file /tmp/scrape.js --url example --record',
+        );
+        process.exit(0);
+      }
       let code: string;
       if (parsed.file) {
         code = fs.readFileSync(parsed.file, 'utf-8');
@@ -1582,30 +1621,57 @@ async function main() {
         }
       }
 
-      const result = await executeInBrowser(code, {
-        port: parsed.port,
-        urlPattern: parsed.url,
-        targetId: parsed.target,
-        record: parsed.record,
-        harOutPath: parsed.harOut,
-      });
+      await withConnection(
+        parsed,
+        async (client) => {
+          await client.send('Emulation.setFocusEmulationEnabled', { enabled: true });
 
-      if (result.success) {
-        console.log(JSON.stringify(result.value, null, 2));
-      } else {
-        console.error(`ERROR: ${result.error}`);
-        if (result.console.length > 0) {
-          console.error('\nConsole output captured before failure:');
-        }
-        process.exit(1);
-      }
+          // Standalone HAR recording (--record flag writes its own file)
+          let standaloneRecorder: HARRecorder | undefined;
+          if (parsed.record) {
+            standaloneRecorder = new HARRecorder(client);
+            await standaloneRecorder.start();
+          }
+
+          const evalResult = (await client.send('Runtime.evaluate', {
+            expression: `(async () => { return (${code}); })()`,
+            awaitPromise: true,
+            returnByValue: true,
+          })) as {
+            result?: { value?: unknown };
+            exceptionDetails?: { exception?: { description?: string } };
+          };
+
+          if (standaloneRecorder) {
+            const har = await standaloneRecorder.finish();
+            writeHarAndPrintSummary(har, parsed.harOut);
+          }
+
+          if (evalResult.exceptionDetails) {
+            console.error(
+              `ERROR: ${evalResult.exceptionDetails.exception?.description ?? 'Unknown error'}`,
+            );
+            process.exit(1);
+          }
+
+          console.log(JSON.stringify(evalResult.result?.value));
+        },
+        { settle: 3000 },
+      );
       break;
     }
 
     case 'record': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture record --url <pattern> [--duration <secs>] [--har-out <path>]\n\n' +
+            'Passive HAR recording for the specified duration (default: 10s).',
+        );
+        process.exit(0);
+      }
       if (!parsed.url && !parsed.target) {
         console.error(
-          'Usage: cdp.ts record --url <pattern> [--duration <secs>] [--har-out <path>]',
+          'Usage: capture record --url <pattern> [--duration <secs>] [--har-out <path>]',
         );
         process.exit(1);
       }
@@ -1628,10 +1694,18 @@ async function main() {
     }
 
     case 'navigate': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture navigate <url> [--har-out <path>] [--settle <ms>] [--har <id>]\n\n' +
+            'Navigate to URL and record HAR. Appends to session HAR if --har is set.\n\n' +
+            'Example: capture navigate "https://app.example.com/dashboard" --settle 3000',
+        );
+        process.exit(0);
+      }
       const url = parsed.positional[0];
       if (!url) {
         console.error(
-          'Usage: cdp.ts navigate <url> [--har-out <path>] [--settle <ms>]',
+          'Usage: capture navigate <url> [--har-out <path>] [--settle <ms>]',
         );
         process.exit(1);
       }
@@ -1640,9 +1714,16 @@ async function main() {
         port: parsed.port,
         url,
         targetId: parsed.target,
-        harOutPath: parsed.harOut,
+        harOutPath: parsed.har ? undefined : parsed.harOut,
         settle: parsed.settle,
       });
+
+      // Append to session HAR if active
+      if (parsed.har && result.har.log.entries.length > 0) {
+        appendToHar(parsed.har, result.har.log.entries);
+        console.error(`  [har:${parsed.har}] +${result.har.log.entries.length} entries`);
+      }
+
       console.log(
         JSON.stringify(
           {
@@ -1658,6 +1739,13 @@ async function main() {
     }
 
     case 'screenshot': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture screenshot [--url <pattern>] [--target <id>] [--out <path>]\n\n' +
+            'Capture a screenshot of the targeted tab. Saves to --out or auto-generates a path.',
+        );
+        process.exit(0);
+      }
       const result = await withConnection(
         parsed,
         async (client) => {
@@ -1675,6 +1763,13 @@ async function main() {
     }
 
     case 'click': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture click "name" [--role button|link|...] [--no-screenshot]\n\n' +
+            'Click an element by its accessible name. Auto-captures a screenshot after clicking.',
+        );
+        process.exit(0);
+      }
       const name = parsed.positional[0];
       if (!name) {
         console.error('Usage: capture click "name" [--role button|link|...] [--no-screenshot]');
@@ -1694,6 +1789,13 @@ async function main() {
     }
 
     case 'type': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture type "text" [--into "field name"] [--no-screenshot]\n\n' +
+            'Type text into the focused element, or into a named field with --into.',
+        );
+        process.exit(0);
+      }
       const text = parsed.positional[0];
       if (!text) {
         console.error('Usage: capture type "text" [--into "field name"] [--no-screenshot]');
@@ -1704,7 +1806,7 @@ async function main() {
         async (client) => {
           let field: string | null = null;
           if (parsed.into) {
-            await focusAndType(client, parsed.into, text);
+            await focusAndType(client, parsed.into, text, parsed.role);
             field = parsed.into;
           } else {
             await typeText(client, text);
@@ -1720,6 +1822,14 @@ async function main() {
     }
 
     case 'a11y': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture a11y [--url <pattern>] [--target <id>] [--json] [--interactive]\n\n' +
+            'Get the accessibility tree. Use --interactive for interactive elements only.\n' +
+            'Use --json for structured JSON output.',
+        );
+        process.exit(0);
+      }
       const result = await withConnection(
         parsed,
         async (client) => {
@@ -1743,10 +1853,42 @@ async function main() {
       } else {
         console.log(result);
       }
+
+      // Hint when a11y tree is sparse
+      if (!parsed.json) {
+        const lineCount = typeof result === 'string' ? result.split('\n').filter(Boolean).length : 0;
+        if (lineCount === 0) {
+          console.error(
+            '\nNo elements found.' +
+            (parsed.interactive ? ' Try without --interactive to see all nodes.' : '') +
+            '\n\nIf this page is part of your project, consider adding ARIA attributes:\n' +
+            '  - role="button|link|textbox" on interactive elements\n' +
+            '  - aria-label="..." on elements without visible text\n' +
+            '  - Semantic HTML (<button>, <input>, <nav>) provides roles automatically',
+          );
+        } else if (parsed.interactive && lineCount < 5) {
+          console.error(
+            `\nOnly ${lineCount} interactive element${lineCount === 1 ? '' : 's'} found. ` +
+            'If this seems low, the page may lack ARIA markup.\n' +
+            'Consider adding role and aria-label attributes to interactive elements in your frontend code.',
+          );
+        }
+      }
+
       break;
     }
 
     case 'har': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture har <create|read|delete>\n\n' +
+            '  create              Create a new HAR recording (returns id)\n' +
+            '  read <id>           Read accumulated HAR entries\n' +
+            '  delete <id>         Delete a HAR recording\n\n' +
+            'Pass --har <id> to exec/navigate commands to append traffic to a recording.',
+        );
+        process.exit(0);
+      }
       const subcommand = args[1];
 
       if (subcommand === 'create') {
@@ -1762,7 +1904,7 @@ async function main() {
       if (subcommand === 'read') {
         const id = args[2];
         if (!id) {
-          console.error('Usage: cdp.ts har read <id>');
+          console.error('Usage: capture har read <id>');
           process.exit(1);
         }
 
@@ -1782,7 +1924,7 @@ async function main() {
       if (subcommand === 'delete') {
         const id = args[2];
         if (!id) {
-          console.error('Usage: cdp.ts har delete <id>');
+          console.error('Usage: capture har delete <id>');
           process.exit(1);
         }
 
@@ -1792,12 +1934,52 @@ async function main() {
       }
 
       console.error(
-        'Usage: cdp.ts har <create|read|delete>\n' +
+        'Usage: capture har <create|read|delete>\n' +
           '  create              Create a new HAR recording (returns id)\n' +
           '  read <id>           Read accumulated HAR entries\n' +
           '  delete <id>         Delete a HAR recording',
       );
       process.exit(1);
+      break;
+    }
+
+    case 'network': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture network <offline|online> [--target <id>] [--url <pattern>]\n\n' +
+            'Toggle network connectivity for a tab. Use "offline" to simulate\n' +
+            'network failure (kills WebSocket connections, blocks HTTP requests).\n' +
+            'Use "online" to restore connectivity.',
+        );
+        process.exit(0);
+      }
+      const mode = parsed.positional[0];
+      if (!mode || !['offline', 'online'].includes(mode)) {
+        console.error('Usage: capture network <offline|online> [--target <id>] [--url <pattern>]');
+        process.exit(1);
+      }
+      const offline = mode === 'offline';
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          await client.send('Network.enable');
+          await client.send('Network.emulateNetworkConditions', {
+            offline,
+            latency: offline ? -1 : 0,
+            downloadThroughput: offline ? 0 : -1,
+            uploadThroughput: offline ? 0 : -1,
+          });
+          return { network: mode, offline };
+        },
+        { settle: 0 },
+      );
+      console.log(JSON.stringify(result, null, 2));
+      if (offline) {
+        console.error('\nNetwork disabled. WebSocket connections will drop.');
+        console.error('Restore with: capture network online');
+      } else {
+        console.error('\nNetwork restored.');
+      }
       break;
     }
 
@@ -1816,6 +1998,7 @@ Commands:
   a11y                Get accessibility tree
   record              Passive HAR recording
   navigate <url>      Navigate to URL and record HAR
+  network <offline|online>  Toggle network (simulate disconnect)
   har create          Create a HAR recording (returns id)
   har read <id>       Read accumulated HAR entries
   har delete <id>     Delete a HAR recording

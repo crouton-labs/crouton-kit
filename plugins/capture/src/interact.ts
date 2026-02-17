@@ -62,13 +62,22 @@ export async function clickByName(
   }
 
   if (matches.length > 1 && !role) {
-    const summary = matches
-      .slice(0, 5)
-      .map((n) => `  ${n.role?.value} "${n.name?.value}"`)
-      .join('\n');
-    throw new Error(
-      `Multiple elements match "${name}" — disambiguate with --role:\n${summary}`,
-    );
+    // Auto-prefer input-like roles for better type --into ergonomics
+    const INPUT_ROLES = new Set(['textbox', 'searchbox', 'combobox', 'textarea', 'spinbutton']);
+    const inputMatches = matches.filter((n) => n.role?.value && INPUT_ROLES.has(n.role.value));
+    if (inputMatches.length === 1) {
+      // Unambiguous input element — use it
+      matches.length = 0;
+      matches.push(inputMatches[0]);
+    } else {
+      const summary = matches
+        .slice(0, 5)
+        .map((n) => `  ${n.role?.value} "${n.name?.value}"`)
+        .join('\n');
+      throw new Error(
+        `Multiple elements match "${name}" — disambiguate with --role:\n${summary}`,
+      );
+    }
   }
 
   const match = matches[0];
@@ -125,8 +134,9 @@ export async function focusAndType(
   client: CDPClient,
   fieldName: string,
   text: string,
+  role?: string,
 ): Promise<ClickResult> {
-  const result = await clickByName(client, fieldName);
+  const result = await clickByName(client, fieldName, role);
   // Small delay for focus to settle
   await new Promise((r) => setTimeout(r, 100));
   await typeText(client, text);

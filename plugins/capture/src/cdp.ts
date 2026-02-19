@@ -11,6 +11,7 @@
  *   capture detect              Detect CDP port
  *   capture list                List all browser tabs
  *   capture open <url>          Open URL in browser (returns tab ID)
+ *   capture reset-tab <url>    Abandon stuck tab, open fresh one
  *   capture screenshot          Capture screenshot
  *   capture a11y                Get accessibility tree
  *   capture record              Passive HAR recording
@@ -175,24 +176,7 @@ export class HARRecorder {
     });
   }
 
-  async finish(): Promise<{ log: { entries: HAREntry[] } }> {
-    // Fetch response bodies
-    for (const [reqId, resp] of this.responses) {
-      try {
-        const bodyResult = (await this.client.send('Network.getResponseBody', {
-          requestId: reqId,
-        })) as {
-          body: string;
-          base64Encoded: boolean;
-        };
-        resp.body = bodyResult.base64Encoded
-          ? Buffer.from(bodyResult.body, 'base64').toString()
-          : bodyResult.body;
-      } catch {
-        // Body may not be available
-      }
-    }
-
+  private buildHar(): { log: { entries: HAREntry[] } } {
     return {
       log: {
         entries: Array.from(this.responses.values()).map((resp) => {
@@ -219,6 +203,31 @@ export class HARRecorder {
         }),
       },
     };
+  }
+
+  async finish(): Promise<{ log: { entries: HAREntry[] } }> {
+    // Fetch response bodies
+    for (const [reqId, resp] of this.responses) {
+      try {
+        const bodyResult = (await this.client.send('Network.getResponseBody', {
+          requestId: reqId,
+        }, 5000)) as {
+          body: string;
+          base64Encoded: boolean;
+        };
+        resp.body = bodyResult.base64Encoded
+          ? Buffer.from(bodyResult.body, 'base64').toString()
+          : bodyResult.body;
+      } catch {
+        // Body may not be available
+      }
+    }
+
+    return this.buildHar();
+  }
+
+  finishPartial(): { log: { entries: HAREntry[] } } {
+    return this.buildHar();
   }
 }
 
@@ -403,7 +412,15 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     }
   }
 
-  // Fill gaps from active session context (explicit flags always win)
+  // Fill gaps from environment variables (set by pipeline orchestrators)
+  if (!parsed.target && !parsed.url && process.env.CDP_TARGET) {
+    parsed.target = process.env.CDP_TARGET;
+  }
+  if (!parsed.har && process.env.CDP_HAR_ID) {
+    parsed.har = process.env.CDP_HAR_ID;
+  }
+
+  // Fill remaining gaps from active session context (explicit flags always win)
   const session = getActiveSession();
   if (session) {
     if (!parsed.har && session.harId) parsed.har = session.harId;
@@ -924,10 +941,39 @@ export class CDPClient {
 // ============================================================================
 
 export async function captureScreenshot(client: CDPClient): Promise<Buffer> {
-  const result = (await client.send('Page.captureScreenshot', {
+  const MAX_DIM = 1600; // headroom below Anthropic's 2000px many-image limit
+  let screenshotOpts: Record<string, unknown> = {
     format: 'png',
     captureBeyondViewport: false,
-  })) as { data: string };
+  };
+
+  try {
+    const metrics = (await client.send('Page.getLayoutMetrics')) as {
+      cssVisualViewport?: { clientWidth: number; clientHeight: number };
+    };
+    const vw = metrics.cssVisualViewport?.clientWidth ?? 0;
+    const vh = metrics.cssVisualViewport?.clientHeight ?? 0;
+
+    const dprResult = (await client.send('Runtime.evaluate', {
+      expression: 'window.devicePixelRatio',
+      returnByValue: true,
+    })) as { result: { value: number } };
+    const dpr = dprResult.result.value ?? 1;
+
+    const actualMaxSide = Math.max(vw, vh) * dpr;
+    const scale = actualMaxSide > MAX_DIM ? MAX_DIM / actualMaxSide : 1 / dpr;
+    screenshotOpts = {
+      ...screenshotOpts,
+      clip: { x: 0, y: 0, width: vw, height: vh, scale },
+    };
+  } catch {
+    // Fallback: capture without downscaling
+  }
+
+  const result = (await client.send(
+    'Page.captureScreenshot',
+    screenshotOpts,
+  )) as { data: string };
   return Buffer.from(result.data, 'base64');
 }
 
@@ -1190,6 +1236,7 @@ export interface NavigateAndRecordResult {
   entryCount: number;
   har: { log: { entries: HAREntry[] } };
   tab: CDPTarget;
+  timedOut: boolean;
 }
 
 export async function navigateAndRecord(
@@ -1239,24 +1286,46 @@ export async function navigateAndRecord(
     await client.send('Page.navigate', { url: options.url });
   }
 
-  // Wait for load event
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(() => {
-      // Don't reject on timeout — partial HAR is still useful
-      console.error('Page load timeout (10s), continuing with settle...');
-      resolve();
-    }, 10000);
-    client.on('Page.loadEventFired', () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
+  const deadline = 60_000;
+  const t0 = Date.now();
+  let timedOut = false;
+  let har!: { log: { entries: HAREntry[] } };
 
-  // Settle time for SPAs that load after DOMContentLoaded
-  console.error(`Settling for ${settle}ms...`);
-  await new Promise((r) => setTimeout(r, settle));
+  try {
+    await Promise.race([
+      (async () => {
+        // Wait for load event
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            console.error('Page load timeout (10s), continuing with settle...');
+            resolve();
+          }, 10000);
+          client.on('Page.loadEventFired', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
 
-  const har = await recorder.finish();
+        // Settle time for SPAs that load after DOMContentLoaded
+        console.error(`Settling for ${settle}ms...`);
+        await new Promise((r) => setTimeout(r, settle));
+
+        har = await recorder.finish();
+      })(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('__navigate_timeout__')), deadline - (Date.now() - t0)),
+      ),
+    ]);
+  } catch (err) {
+    if (err instanceof Error && err.message === '__navigate_timeout__') {
+      timedOut = true;
+      console.error('Navigate timeout (60s) — returning partial HAR');
+      har = recorder.finishPartial();
+    } else {
+      throw err;
+    }
+  }
+
   const harPath = writeHarAndPrintSummary(har, options.harOutPath);
 
   client.close();
@@ -1264,7 +1333,7 @@ export async function navigateAndRecord(
   // Refresh target info
   const updatedTab = (await findTab(port, options.url)) ?? tab;
 
-  return { harPath, entryCount: har.log.entries.length, har, tab: updatedTab };
+  return { harPath, entryCount: har.log.entries.length, har, tab: updatedTab, timedOut };
 }
 
 // ============================================================================
@@ -1693,6 +1762,50 @@ async function main() {
       break;
     }
 
+    case 'reset-tab': {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture reset-tab <url> [--port <port>]\n\n' +
+            'Abandon a stuck/unresponsive tab and open a fresh one.\n' +
+            'Updates session context so subsequent commands auto-target the new tab.\n\n' +
+            'Example: capture reset-tab "https://www.instagram.com/"',
+        );
+        process.exit(0);
+      }
+      const url = parsed.positional[0];
+      if (!url) {
+        console.error(
+          'Usage: capture reset-tab <url> [--port <port>]',
+        );
+        process.exit(1);
+      }
+      const p = parsed.port ?? (await detectCdpPort());
+      const tab = await openTab(p, url);
+
+      // Wait for page load
+      if (tab.webSocketDebuggerUrl) {
+        const client = new CDPClient(tab.webSocketDebuggerUrl);
+        await client.waitReady();
+        await client.send('Page.enable');
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => resolve(), 10000);
+          client.on('Page.loadEventFired', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        client.close();
+      }
+
+      // Update session context so subsequent commands auto-target the new tab
+      updateActiveSession({ targetId: tab.id });
+
+      console.log(JSON.stringify({ id: tab.id, url: tab.url, port: p }, null, 2));
+      console.error(`\nNew tab opened. Session context updated.`);
+      console.error(`Use --target ${tab.id} if passing target explicitly.`);
+      break;
+    }
+
     case 'navigate': {
       if (parsed.help) {
         console.log(
@@ -1730,6 +1843,7 @@ async function main() {
             entryCount: result.entryCount,
             harPath: result.harPath,
             tabUrl: result.tab.url,
+            timedOut: result.timedOut,
           },
           null,
           2,
@@ -1992,6 +2106,7 @@ Commands:
   detect              Detect CDP port (prioritizes default browser)
   list                List all browser tabs
   open <url>          Open URL in browser (returns tab ID)
+  reset-tab <url>     Abandon stuck tab, open fresh one (updates session)
   screenshot          Capture screenshot
   click "name"        Click element by accessible name
   type "text"         Type text into focused element

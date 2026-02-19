@@ -417,6 +417,7 @@ async function main(): Promise<void> {
     case "detect":
     case "exec":
     case "open":
+    case "reset-tab":
     case "screenshot":
     case "click":
     case "type":
@@ -444,6 +445,7 @@ CDP commands:
   exec --file <path>                 Execute JS from file
   list                               List all browser tabs
   open <url>                         Open URL in browser
+  reset-tab <url>                    Abandon stuck tab, open fresh one
   screenshot                         Capture screenshot
   click "name"                       Click element by accessible name
   type "text"                        Type text into focused element

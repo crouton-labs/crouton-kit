@@ -14,7 +14,7 @@ Stage and commit changes into logical commits.
 
 **Git repo:** !`git rev-parse --is-inside-work-tree 2>/dev/null || echo "NOT_A_GIT_REPO"`
 
-If the above shows "NOT_A_GIT_REPO", inform the user this command requires a git repository and stop.
+If "NOT_A_GIT_REPO": check for git repos in immediate subdirectories. If found, commit changes in each repo that has uncommitted work. If none found, inform the user and stop.
 
 **Status:**
 ```

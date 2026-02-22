@@ -1,6 +1,6 @@
 ---
 name: programmer
-description: Implementation agent for multi-file features. Analyzes patterns first, then implements. Use when task involves 3+ files or needs pattern analysis. Proactively use this agent especially when implementing features in longer conversations.
+description: Implementation agent for multi-file features. Analyzes patterns first, then implements. Use multiple when implementing independent tasks. 
 model: sonnet
 color: blue
 ---

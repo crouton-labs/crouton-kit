@@ -11,7 +11,9 @@ CAPTURE_BIN="$PLUGIN_ROOT/dist/capture.mjs"
 LOCAL_BIN="$HOME/.local/bin"
 
 # Already accessible — nothing to do
-if command -v capture &>/dev/null; then
+# command -v won't find capture if ~/.local/bin isn't in Claude's process PATH,
+# so also check the explicit install path to avoid re-running on every session start.
+if command -v capture &>/dev/null || [[ -x "$LOCAL_BIN/capture" ]]; then
     exit 0
 fi
 

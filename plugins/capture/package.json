@@ -6,7 +6,8 @@
     "capture": "./dist/capture.mjs"
   },
   "scripts": {
-    "build": "esbuild src/capture.ts --bundle --platform=node --format=esm --outfile=dist/capture.mjs '--banner:js=#!/usr/bin/env node' --packages=external"
+    "build": "esbuild src/capture.ts --bundle --platform=node --format=esm --outfile=dist/capture.mjs '--banner:js=#!/usr/bin/env node' --packages=external",
+    "postinstall": "npm run build"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",

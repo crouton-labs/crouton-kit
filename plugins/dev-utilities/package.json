@@ -6,7 +6,7 @@
     "build": "esbuild hooks/claude-md-manager.mjs --bundle --platform=node --format=esm --outfile=hooks/claude-md-manager.bundle.mjs --external:child_process --external:fs --external:path"
   },
   "devDependencies": {
-    "@r-cli/sdk": "^1.1.117",
+    "@r-cli/sdk": "^1.2.0",
     "esbuild": "^0.27.2"
   }
 }

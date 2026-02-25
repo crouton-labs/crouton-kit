@@ -253,6 +253,310 @@ function getClaudeMdHierarchy(fileDir, cwd) {
 }
 
 /**
+ * Discover git repositories starting from cwd.
+ * If cwd itself is a git repo, return [gitRoot].
+ * Otherwise, scan immediate child directories for .git entries.
+ */
+function discoverGitRepos(cwd) {
+  try {
+    const gitRoot = execSync('git rev-parse --show-toplevel', { cwd, encoding: 'utf8' }).trim();
+    return [gitRoot];
+  } catch (_error) {
+    // cwd is not a git repo — scan immediate children
+  }
+
+  const repos = [];
+  let entries;
+  try {
+    entries = readdirSync(cwd);
+  } catch (_error) {
+    return repos;
+  }
+
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue;
+    const childPath = join(cwd, entry);
+    try {
+      if (!statSync(childPath).isDirectory()) continue;
+    } catch (_error) {
+      continue;
+    }
+    if (existsSync(join(childPath, '.git'))) {
+      repos.push(childPath);
+    }
+  }
+
+  return repos;
+}
+
+/**
+ * Process a single git repository: diff, filter, query, return results.
+ */
+async function processRepo(repoCwd, sessionId, processingCache) {
+  const homeDir = process.env.HOME;
+  const changedFileSet = new Set();
+  const filesHandled = new Map();
+
+  // Get all changed files via git
+  let changedFiles = [];
+  try {
+    const gitOutput = execSync('git diff --name-only HEAD', { cwd: repoCwd, encoding: 'utf8' });
+    changedFiles = gitOutput.trim().split('\n').filter(Boolean);
+
+    if (changedFiles.length === 0) {
+      appendLog(`[START] session=${sessionId}, cwd=${repoCwd} | [SKIP] No file changes detected`);
+      return { changedFileSet, filesHandled, directoriesProcessed: 0 };
+    }
+  } catch (error) {
+    appendLog(`[START] session=${sessionId}, cwd=${repoCwd} | [SKIP] Git check failed or not a repo`);
+    return { changedFileSet, filesHandled, directoriesProcessed: 0 };
+  }
+
+  const directoryFiles = new Map();
+  const relativeDirLookup = new Map();
+  let skippedGitIgnored = 0;
+  let unchangedSinceLastRun = 0;
+
+  for (const file of changedFiles) {
+    const filePath = join(repoCwd, file);
+    const fileDir = dirname(filePath);
+    const relativePath = relative(repoCwd, fileDir) || '.';
+
+    // Skip .claude directories
+    if (relativePath.includes('.claude')) continue;
+
+    // Skip CLAUDE.md files themselves
+    if (basename(filePath) === 'CLAUDE.md') continue;
+
+    // Skip files outside repoCwd
+    if (relativePath.startsWith('..')) continue;
+
+    // Skip git-ignored files
+    try {
+      execSync(`git check-ignore -q "${file}"`, { cwd: repoCwd, stdio: 'pipe' });
+      skippedGitIgnored++;
+      continue;
+    } catch (_error) {
+      // Non-zero exit code means file is NOT ignored
+    }
+
+    const cacheKey = join(repoCwd, file);
+    changedFileSet.add(cacheKey);
+
+    const signature = getFileSignature(filePath);
+    const cachedSignature = processingCache[cacheKey];
+    if (cachedSignature && signaturesEqual(signature, cachedSignature)) {
+      unchangedSinceLastRun++;
+      continue;
+    }
+
+    if (!directoryFiles.has(fileDir)) {
+      directoryFiles.set(fileDir, []);
+      relativeDirLookup.set(fileDir, relativePath);
+    }
+
+    directoryFiles.get(fileDir).push({ file: cacheKey, signature });
+  }
+
+  if (directoryFiles.size === 0) {
+    const detailParts = [];
+    if (unchangedSinceLastRun > 0) detailParts.push(`unchanged=${unchangedSinceLastRun}`);
+    if (skippedGitIgnored > 0) detailParts.push(`git-ignored=${skippedGitIgnored}`);
+    const detailSuffix = detailParts.length > 0 ? ` (${detailParts.join(', ')})` : '';
+    appendLog(`[START] session=${sessionId}, cwd=${repoCwd} | [SKIP] No new file changes since last run${detailSuffix}`);
+    return { changedFileSet, filesHandled, directoriesProcessed: 0 };
+  }
+
+  const { excludedDirectories } = loadSettings(repoCwd);
+
+  const directoriesToProcess = [];
+
+  for (const [fileDir, filesInDir] of directoryFiles.entries()) {
+    const relativePath = relativeDirLookup.get(fileDir) || '.';
+
+    if (isDirectoryExcluded(relativePath, excludedDirectories)) {
+      appendLog(`[SKIP] ${relativePath} (excluded by config)`);
+      markFilesAsHandled(filesInDir, filesHandled);
+      continue;
+    }
+
+    const claudeMdPath = join(fileDir, 'CLAUDE.md');
+    const globalClaudePath = homeDir ? join(homeDir, '.claude', 'CLAUDE.md') : null;
+    if (globalClaudePath && claudeMdPath === globalClaudePath) {
+      appendLog(`[SKIP] ${relativePath} (global CLAUDE.md - not managed by hook)`);
+      markFilesAsHandled(filesInDir, filesHandled);
+      continue;
+    }
+
+    const hasClaudeMd = existsSync(claudeMdPath);
+    const existingClaudeMd = hasClaudeMd ? readFileSync(claudeMdPath, 'utf-8') : '';
+    const { fileCount, fileTypes, subdirs, isRoot, targetLines } = getDirectoryInfo(fileDir, repoCwd);
+
+    if (!hasClaudeMd && !isRoot && fileCount < 4) {
+      appendLog(`[SKIP] ${relativePath} (only ${fileCount} files, need ≥4)`);
+      markFilesAsHandled(filesInDir, filesHandled);
+      continue;
+    }
+
+    const claudeMdHierarchy = getClaudeMdHierarchy(fileDir, repoCwd);
+    const changedFilesInDir = filesInDir.map(({ file }) => basename(file));
+
+    // Load custom guidance file if present
+    const customGuidancePath = join(fileDir, '.claude-md-manager.md');
+    const customGuidance = existsSync(customGuidancePath)
+      ? readFileSync(customGuidancePath, 'utf-8')
+      : null;
+
+    directoriesToProcess.push({
+      relativePath,
+      claudeMdPath,
+      hasClaudeMd,
+      existingClaudeMd,
+      fileTypes,
+      subdirs,
+      isRoot,
+      targetLines,
+      claudeMdHierarchy,
+      changedFilesInDir,
+      filesInDir,
+      customGuidance
+    });
+  }
+
+  const startParts = [
+    `session=${sessionId}`,
+    `directories=${directoriesToProcess.length}`
+  ];
+  if (skippedGitIgnored > 0) startParts.push(`git-ignored=${skippedGitIgnored}`);
+  if (unchangedSinceLastRun > 0) startParts.push(`unchanged=${unchangedSinceLastRun}`);
+  appendLog(`[START] ${startParts.join(', ')}`);
+
+  if (excludedDirectories.length > 0) {
+    appendLog(`[CONFIG] Excluded directories: ${excludedDirectories.join(', ')}`);
+  }
+
+  if (directoriesToProcess.length === 0) {
+    appendLog('[SKIP] No directories qualified after filtering');
+    return { changedFileSet, filesHandled, directoriesProcessed: 0 };
+  }
+
+  for (const {
+    relativePath,
+    claudeMdPath,
+    hasClaudeMd,
+    existingClaudeMd,
+    fileTypes,
+    subdirs,
+    isRoot,
+    targetLines,
+    claudeMdHierarchy,
+    changedFilesInDir,
+    filesInDir,
+    customGuidance
+  } of directoriesToProcess) {
+    let hierarchyContext = '';
+    if (claudeMdHierarchy.length > 0) {
+      hierarchyContext = '\n\n## Parent CLAUDE.md Files (for context)\n\n';
+      for (const { path, content, lineCount } of claudeMdHierarchy) {
+        hierarchyContext += `### ${path} (${lineCount} lines)\n\`\`\`\n${content}\n\`\`\`\n\n`;
+      }
+    }
+
+    let customGuidanceContext = '';
+    if (customGuidance) {
+      customGuidanceContext = '\n\n## Custom Guidance For This Directory\n\n' + customGuidance + '\n\n';
+    }
+
+    const systemPrompt = isRoot
+      ? `Create or update the root CLAUDE.md. Guardrails and pointers, not a manual.
+
+## Prioritize
+1. Constraints and gotchas — what breaks if ignored
+2. Key commands — build, test, lint (80% cases)
+3. Architecture — how components relate, 2-3 sentences max
+4. Conventions that differ from defaults
+
+## Constraints
+- Never "Never X" without the alternative
+- Don't list obvious things (language, framework) unless there's a gotcha
+- Reference other docs with *when/why* to read them
+- Short declarative bullets > paragraphs
+
+## Output
+Write tool only, no explanatory text.`
+      : `Create or update a subdirectory CLAUDE.md. Only document non-obvious, codebase-specific information.
+
+## Good content
+- Non-obvious behavior (race guards, fallback chains, state machines, execution paths)
+- Cross-module relationships not apparent from file names
+- Constraints that cause bugs if violated (timeouts, ordering, idempotency)
+
+## Bad content — write NOTHING instead
+- Generic framework guidance ("use @Cron decorator", "handle errors gracefully")
+- Restating what's obvious from directory/file names
+- Repeating parent CLAUDE.md content
+- Generic best practices ("use dependency injection", "write tests")
+
+## Constraints
+- Never "Never X" without the alternative
+- Every line must earn its place — cut anything a developer would say "obviously" to
+- Reference other docs with *when/why* to read them
+
+## Output
+Write tool if worth documenting, otherwise output NOTHING.`;
+
+    const userPrompt = hasClaudeMd
+      ? `Directory: ${relativePath}
+Changed files: ${changedFilesInDir.join(', ')}
+Target length: ${targetLines} lines
+
+Current CLAUDE.md (${existingClaudeMd.split('\n').length} lines):
+\`\`\`
+${existingClaudeMd}
+\`\`\`
+${hierarchyContext}${customGuidanceContext}
+Contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
+
+Update ${claudeMdPath} if the current content is generic padding or missing important patterns. Do nothing if already good.`
+      : `Directory: ${relativePath}
+Changed files: ${changedFilesInDir.join(', ')}
+Target length: ${targetLines} lines
+
+No CLAUDE.md exists.
+${hierarchyContext}${customGuidanceContext}
+Contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
+
+Create ${claudeMdPath} if there's non-obvious behavior worth documenting. Do nothing otherwise.`;
+
+    try {
+      const result = query({
+        prompt: userPrompt,
+        cwd: repoCwd,
+        options: {
+          systemPrompt,
+          model: "claude-sonnet-4-6",
+          allowedTools: ["Read", "Glob", "Grep", "Write"],
+          permissionMode: "bypassPermissions",
+          hooks: {},
+          pathToClaudeCodeExecutable: "/opt/homebrew/bin/claude"
+        }
+      });
+
+      for await (const _message of result) {
+        // Consume the stream
+      }
+
+      appendLog(`[PROCESSED] ${relativePath}`);
+      markFilesAsHandled(filesInDir, filesHandled);
+    } catch (error) {
+      appendLog(`[ERROR] ${relativePath}: ${error.message}`);
+    }
+  }
+
+  return { changedFileSet, filesHandled, directoriesProcessed: directoriesToProcess.length };
+}
+
+/**
  * Background worker that processes all directories changed in the session
  */
 async function backgroundWorker() {
@@ -286,341 +590,40 @@ async function backgroundWorker() {
     }
   }
 
-  // Get all changed files via git
-  let changedFiles = [];
-  try {
-    const gitOutput = execSync('git diff --name-only HEAD', { cwd, encoding: 'utf8' });
-    changedFiles = gitOutput.trim().split('\n').filter(Boolean);
+  const repos = discoverGitRepos(cwd);
 
-    if (changedFiles.length === 0) {
-      appendLog(`[START] session=${sessionId}, cwd=${cwd} | [SKIP] No file changes detected`);
-      process.exit(0);
-    }
-  } catch (error) {
-    appendLog(`[START] session=${sessionId}, cwd=${cwd} | [SKIP] Git check failed or not a repo`);
+  if (repos.length === 0) {
+    appendLog(`[START] session=${sessionId}, cwd=${cwd} | [SKIP] No git repos found`);
     process.exit(0);
+  }
+
+  if (repos.length > 1) {
+    appendLog(`[DISCOVER] Found ${repos.length} git repos under ${cwd}: ${repos.map(r => relative(cwd, r) || '.').join(', ')}`);
   }
 
   const processingCache = loadProcessingCache();
-  const changedFileSet = new Set();
-  const directoryFiles = new Map();
-  const relativeDirLookup = new Map();
-  let skippedGitIgnored = 0;
-  let unchangedSinceLastRun = 0;
+  const allChangedFiles = new Set();
+  const allFilesHandled = new Map();
+  let totalDirectoriesProcessed = 0;
 
-  for (const file of changedFiles) {
-    const filePath = join(cwd, file);
-    const fileDir = dirname(filePath);
-    const relativePath = relative(cwd, fileDir) || '.';
-
-    // Skip .claude directories
-    if (relativePath.includes('.claude')) continue;
-
-    // Skip CLAUDE.md files themselves
-    if (basename(filePath) === 'CLAUDE.md') continue;
-
-    // Skip files outside cwd
-    if (relativePath.startsWith('..')) continue;
-
-    // Skip git-ignored files
-    try {
-      execSync(`git check-ignore -q "${file}"`, { cwd, stdio: 'pipe' });
-      skippedGitIgnored++;
-      continue;
-    } catch (error) {
-      // Non-zero exit code means file is NOT ignored
-    }
-
-    changedFileSet.add(file);
-
-    const signature = getFileSignature(filePath);
-    const cachedSignature = processingCache[file];
-    if (cachedSignature && signaturesEqual(signature, cachedSignature)) {
-      unchangedSinceLastRun++;
-      continue;
-    }
-
-    if (!directoryFiles.has(fileDir)) {
-      directoryFiles.set(fileDir, []);
-      relativeDirLookup.set(fileDir, relativePath);
-    }
-
-    directoryFiles.get(fileDir).push({
-      file,
-      signature
-    });
+  for (const repoCwd of repos) {
+    const result = await processRepo(repoCwd, sessionId, processingCache);
+    for (const f of result.changedFileSet) allChangedFiles.add(f);
+    for (const [f, sig] of result.filesHandled) allFilesHandled.set(f, sig);
+    totalDirectoriesProcessed += result.directoriesProcessed;
   }
 
-  if (directoryFiles.size === 0) {
-    const prunedCache = pruneCache(processingCache, changedFileSet);
-    saveProcessingCache(prunedCache);
-    const detailParts = [];
-    if (unchangedSinceLastRun > 0) {
-      detailParts.push(`unchanged=${unchangedSinceLastRun}`);
-    }
-    if (skippedGitIgnored > 0) {
-      detailParts.push(`git-ignored=${skippedGitIgnored}`);
-    }
-    const detailSuffix = detailParts.length > 0 ? ` (${detailParts.join(', ')})` : '';
-    appendLog(`[START] session=${sessionId}, cwd=${cwd} | [SKIP] No new file changes since last run${detailSuffix}`);
-    process.exit(0);
-  }
-
-  const { excludedDirectories } = loadSettings(cwd);
-
-  const filesHandled = new Map();
-  const directoriesToProcess = [];
-
-  for (const [fileDir, filesInDir] of directoryFiles.entries()) {
-    const relativePath = relativeDirLookup.get(fileDir) || '.';
-
-    if (isDirectoryExcluded(relativePath, excludedDirectories)) {
-      appendLog(`[SKIP] ${relativePath} (excluded by config)`);
-      markFilesAsHandled(filesInDir, filesHandled);
-      continue;
-    }
-
-    const claudeMdPath = join(fileDir, 'CLAUDE.md');
-    const globalClaudePath = homeDir ? join(homeDir, '.claude', 'CLAUDE.md') : null;
-    if (globalClaudePath && claudeMdPath === globalClaudePath) {
-      appendLog(`[SKIP] ${relativePath} (global CLAUDE.md - not managed by hook)`);
-      markFilesAsHandled(filesInDir, filesHandled);
-      continue;
-    }
-
-    const hasClaudeMd = existsSync(claudeMdPath);
-    const existingClaudeMd = hasClaudeMd ? readFileSync(claudeMdPath, 'utf-8') : '';
-    const { fileCount, fileTypes, subdirs, isRoot, targetLines } = getDirectoryInfo(fileDir, cwd);
-
-    if (!hasClaudeMd && !isRoot && fileCount < 4) {
-      appendLog(`[SKIP] ${relativePath} (only ${fileCount} files, need ≥4)`);
-      markFilesAsHandled(filesInDir, filesHandled);
-      continue;
-    }
-
-    const claudeMdHierarchy = getClaudeMdHierarchy(fileDir, cwd);
-    const changedFilesInDir = filesInDir.map(({ file }) => basename(file));
-
-    // Load custom guidance file if present
-    const customGuidancePath = join(fileDir, '.claude-md-manager.md');
-    const customGuidance = existsSync(customGuidancePath)
-      ? readFileSync(customGuidancePath, 'utf-8')
-      : null;
-
-    directoriesToProcess.push({
-      relativePath,
-      claudeMdPath,
-      hasClaudeMd,
-      existingClaudeMd,
-      fileTypes,
-      subdirs,
-      isRoot,
-      targetLines,
-      claudeMdHierarchy,
-      changedFilesInDir,
-      filesInDir,
-      customGuidance
-    });
-  }
-
-  const startParts = [
-    `session=${sessionId}`,
-    `directories=${directoriesToProcess.length}`
-  ];
-  if (skippedGitIgnored > 0) {
-    startParts.push(`git-ignored=${skippedGitIgnored}`);
-  }
-  if (unchangedSinceLastRun > 0) {
-    startParts.push(`unchanged=${unchangedSinceLastRun}`);
-  }
-  appendLog(`[START] ${startParts.join(', ')}`);
-
-  if (excludedDirectories.length > 0) {
-    appendLog(`[CONFIG] Excluded directories: ${excludedDirectories.join(', ')}`);
-  }
-
-  if (directoriesToProcess.length === 0) {
-    const finalCache = pruneCache(processingCache, changedFileSet);
-    for (const [file, signature] of filesHandled.entries()) {
-      finalCache[file] = signature;
-    }
-    saveProcessingCache(finalCache);
-    appendLog('[SKIP] No directories qualified after filtering');
-    process.exit(0);
-  }
-
-  for (const {
-    relativePath,
-    claudeMdPath,
-    hasClaudeMd,
-    existingClaudeMd,
-    fileTypes,
-    subdirs,
-    isRoot,
-    targetLines,
-    claudeMdHierarchy,
-    changedFilesInDir,
-    filesInDir,
-    customGuidance
-  } of directoriesToProcess) {
-    let hierarchyContext = '';
-    if (claudeMdHierarchy.length > 0) {
-      hierarchyContext = '\n\n## Parent CLAUDE.md Files (for context)\n\n';
-      for (const { path, content, lineCount } of claudeMdHierarchy) {
-        hierarchyContext += `### ${path} (${lineCount} lines)\n\`\`\`\n${content}\n\`\`\`\n\n`;
-      }
-    }
-
-    let customGuidanceContext = '';
-    if (customGuidance) {
-      customGuidanceContext = '\n\n## Custom Guidance For This Directory\n\n' + customGuidance + '\n\n';
-    }
-
-    const systemPrompt = isRoot
-      ? `You are an expert at creating effective CLAUDE.md files for project root directories.
-
-## Philosophy
-
-CLAUDE.md is a curated set of **guardrails and pointers**, not a comprehensive manual. Treat every line as scarce real estate. Focus on constraints and gotchas—things Claude would get wrong without guidance—over broad descriptions.
-
-## Root Directory CLAUDE.md Requirements
-
-**Prioritize (in order):**
-1. **Critical constraints and gotchas** - non-obvious rules, what breaks if ignored
-2. **Key commands** - build, test, lint (the 80% cases, not every flag)
-3. **Architecture overview** - only how major components relate, 2-3 sentences max
-4. **Conventions that differ from defaults** - only what's surprising
-
-**Writing rules:**
-- Never write "Never X" without providing the preferred alternative
-- When referencing other docs, pitch *when/why* to read them (e.g., "For complex X usage or FooError, see path/to/docs.md")
-- Don't list obvious things (language, framework) unless there's a gotcha
-- Short declarative bullets > paragraphs
-
-## Output Format
-- Use the Write tool with NO explanatory text
-- Create a well-structured CLAUDE.md with clear sections`
-      : `You are an expert at creating concise, focused CLAUDE.md files for subdirectories in software projects.
-
-## Best Practices for Subdirectory CLAUDE.md Files
-
-### When to Create
-- Create for directories with >5 files or significant complexity
-- Create if there are specific conventions, patterns, or constraints worth documenting
-- Skip only if the directory is trivial (few files, obvious purpose)
-
-### Content Guidelines
-- **Be extremely concise** - use short, declarative bullet points
-- **Focus on what's unique** - don't repeat what's in parent CLAUDE.md files or what's obvious
-- **Local context only** - conventions, patterns, or constraints specific to THIS directory
-- **Avoid redundancy** - if folder name is "utils", don't explain it contains utilities
-
-### Structure (when needed)
-- Brief purpose statement (1 line, only if non-obvious)
-- Local coding conventions (only if they differ from project standards)
-- Important boundaries or constraints (what NOT to do here)
-- Key dependencies or interactions (only if critical)
-
-### Writing Rules
-- Never write "Never X" without providing the preferred alternative
-- When referencing other docs, pitch *when/why* to read them (e.g., "For FooError, see path/to/docs.md")
-- Every line is scarce real estate—if it's obvious, cut it
-
-### Anti-Patterns to Avoid
-- Long explanatory paragraphs
-- Repeating project-wide conventions
-- Obvious information (folder structure explanations)
-- Over-engineering simple directories
-- Including generic best practices
-- Bare "Never X" constraints without alternatives
-
-Remember: **Create docs for directories with >5 files**. Be helpful and proactive.
-
-## Output Format
-- If you decide to use the Write tool, use it with NO explanatory text
-- If you decide NOT to create/update, output NOTHING
-- Do not explain your reasoning or decision`;
-
-    const userPrompt = hasClaudeMd
-      ? `Files were edited in: ${relativePath}
-
-This directory already has a CLAUDE.md file (${existingClaudeMd.split('\n').length} lines):
-\`\`\`
-${existingClaudeMd}
-\`\`\`
-${hierarchyContext}${customGuidanceContext}
-Directory contains:
-- File types: ${fileTypes.slice(0, 10).join(', ')}
-- Subdirectories: ${subdirs.length === 0 ? 'none' : subdirs.slice(0, 10).join(', ')}
-
-Changed files: ${changedFilesInDir.join(', ')}
-
-**Target length: ${targetLines} lines**
-
-Should this CLAUDE.md be updated? Consider:
-1. Does the existing content still accurately reflect the directory purpose?
-2. Is there any new critical context from the changed files that's missing?
-3. Can any content be removed as redundant or obvious (check parent CLAUDE.md files)?
-4. Is it the right length for this directory's complexity?
-
-If you decide to update the CLAUDE.md, use the Write tool to write it to ${claudeMdPath}.
-If no update is needed, do nothing.
-
-Be somewhat conservative - only edit if there's a clear, important reason.`
-      : `Files were edited in: ${relativePath}
-
-This directory does NOT have a CLAUDE.md file.
-${hierarchyContext}${customGuidanceContext}
-Directory contains:
-- File types: ${fileTypes.slice(0, 10).join(', ')}
-- Subdirectories: ${subdirs.length === 0 ? 'none' : subdirs.slice(0, 10).join(', ')}
-
-Changed files: ${changedFilesInDir.join(', ')}
-
-**Target length: ${targetLines} lines**
-
-Should a CLAUDE.md be created for this directory?
-
-**Creation criteria (at least one should be true):**
-1. Directory has >5 files OR >3 subdirectories
-2. There are specific conventions, patterns, or constraints to document
-3. There is important unique context not covered in parent CLAUDE.md files
-
-If any criteria is met, use the Write tool to create ${claudeMdPath}.
-If none apply, do nothing.`;
-
-    try {
-      const result = query({
-        prompt: userPrompt,
-        cwd: cwd,
-        options: {
-          systemPrompt,
-          model: "claude-haiku-4-5",
-          allowedTools: ["Write"],
-          permissionMode: "bypassPermissions",
-          hooks: {},
-          pathToClaudeCodeExecutable: "/opt/homebrew/bin/claude"
-        }
-      });
-
-      for await (const _message of result) {
-        // Consume the stream
-      }
-
-      appendLog(`[PROCESSED] ${relativePath}`);
-      markFilesAsHandled(filesInDir, filesHandled);
-    } catch (error) {
-      appendLog(`[ERROR] ${relativePath}: ${error.message}`);
-    }
-  }
-
-  const finalCache = pruneCache(processingCache, changedFileSet);
-  for (const [file, signature] of filesHandled.entries()) {
+  const finalCache = pruneCache(processingCache, allChangedFiles);
+  for (const [file, signature] of allFilesHandled.entries()) {
     finalCache[file] = signature;
   }
   saveProcessingCache(finalCache);
 
-  appendLog(`[DONE] session=${sessionId} | processed ${directoriesToProcess.length} directories`);
+  if (totalDirectoriesProcessed > 0) {
+    const repoLabel = repos.length > 1 ? ` across ${repos.length} repos` : '';
+    appendLog(`[DONE] session=${sessionId} | processed ${totalDirectoriesProcessed} directories${repoLabel}`);
+  }
+
   process.exit(0);
 }
 

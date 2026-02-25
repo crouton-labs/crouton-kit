@@ -4,28 +4,32 @@ Claude Code lifecycle hooks that execute at specific session and tool events.
 
 ## Hook Types (hooks.json)
 
-- **SessionStart** - When session starts (matched on `clear`, `resume`, `compact`)
-- **UserPromptSubmit** - When user submits a prompt
-- **PreToolUse** - Before Write/Edit/MultiEdit/NotebookEdit tools execute
-- **PostToolUse** - After Bash tool execution
-- **Stop** - When Claude finishes responding
-- **SubagentStart/SubagentStop** - Subagent lifecycle
-- **TeammateIdle** - Teammate about to idle (can force continuation)
-- **TaskCompleted** - Task marked complete (can reject)
-- **Notification** - Fires on file notifications (e.g., success sounds)
+- **SessionStart** - When session starts (with optional `matcher` for `clear` or unconditional)
+- **PreToolUse** - Before Bash tool execution (with tool matchers)
+- **PostToolUse** - After Bash tool execution (with tool matchers)
 - **SessionEnd** - When session ends
+- **Notification** - Fires on events (e.g., success sounds)
 
-## Hook Implementations
+## Active Hook Implementations
 
-- `protected-branch-guard.py` - PreToolUse: prevents accidental edits to protected files
-- `push-to-protected-guard.py` - PreToolUse: blocks git push to protected branches, instructs to use extract-commits
-- `push-pr-prompt.py` - PostToolUse: prompts for git push/PR creation after Bash commands
-- `notification-sound.sh` - Notification: plays success sound feedback
-- `claude-md-manager.mjs` - SessionStart/End: manages CLAUDE.md files
+### SessionStart/SessionEnd
+- `claude-md-manager.bundle.mjs` - Auto-creates/updates CLAUDE.md files for directories with git-changed files; uses caching and respects `.claude-md-manager-ignore` patterns
+- `setup-path.sh` - Initializes PATH (SessionStart only)
 
-## Pattern Notes
+### PreToolUse (Bash only)
+- `push-to-protected-guard.py` - Blocks git push to protected branches
+- `block-destructive-git.sh` - Prevents destructive git operations (e.g., `git reset --hard`)
+
+### PostToolUse (Bash only)
+- `push-pr-prompt.py` - Prompts for git push/PR creation after Bash commands
+- `pr-merge-cleanup.py` - Cleanup operations after PR merges
+
+### Notification
+- `notification-sound.sh` - Plays success sound feedback
+
+## Implementation Notes
 
 - Each hook is a **separate executable** (Python, shell, or JavaScript)
 - Hooks are **synchronous** - execution blocks the operation
 - Use `${CLAUDE_PLUGIN_ROOT}` to reference hook paths in hooks.json
-- Matchers support `|` for multiple tools (e.g., `Write|Edit`)
+- Matchers: `matcher: "Bash"` targets specific tools; `matcher: "clear"` targets SessionStart source type

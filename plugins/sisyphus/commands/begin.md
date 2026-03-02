@@ -2,6 +2,8 @@
 description: Hand off a task to sisyphus multi-agent orchestration
 ---
 
+!`sisyphus -h`
+
 Run `sisyphus start` with a concise task/goal and optional background context:
 
 ```bash

@@ -445,24 +445,37 @@ async function connectForCommand(
     throw new Error('Use --target <tabId> or --url <pattern> to target a tab.');
   }
 
-  const port = parsed.port ?? (await detectCdpPort());
-
-  // Prefer --target (exact tab ID) over --url (pattern match)
-  let tab: CDPTarget | null;
-  if (parsed.target) {
-    tab = await findTabById(port, parsed.target);
-    if (!tab) {
-      throw new Error(
-        `No tab found with target ID "${parsed.target}". Tab may have been closed.`,
-      );
+  // If --port is explicit, search only that port. Otherwise search all endpoints.
+  let tab: CDPTarget | null = null;
+  if (parsed.port) {
+    if (parsed.target) {
+      tab = await findTabById(parsed.port, parsed.target);
+    } else {
+      tab = await findTab(parsed.port, parsed.url);
     }
   } else {
-    tab = await findTab(port, parsed.url);
-    if (!tab) {
-      throw new Error(
-        `No tab found matching "${parsed.url}". Open the page first.`,
-      );
+    const endpoints = await detectCdpPortsAsync();
+    for (const ep of endpoints) {
+      try {
+        if (parsed.target) {
+          tab = await findTabById(ep.port, parsed.target);
+        } else {
+          tab = await findTab(ep.port, parsed.url);
+        }
+        if (tab) break;
+      } catch {
+        // Skip endpoints that fail
+      }
     }
+  }
+
+  if (!tab) {
+    const query = parsed.target
+      ? `target ID "${parsed.target}"`
+      : `"${parsed.url}"`;
+    throw new Error(
+      `No tab found matching ${query}. Tab may have been closed or page not open.`,
+    );
   }
 
   if (!tab.webSocketDebuggerUrl) {
@@ -1603,24 +1616,51 @@ async function main() {
       if (parsed.help) {
         console.log(
           'Usage: capture list [--port <port>]\n\n' +
-            'List all browser tabs on the CDP port.\n' +
-            'Returns JSON array of {id, title, url}.',
+            'List all browser tabs across all CDP endpoints (or a specific port).\n' +
+            'Returns JSON array of {id, title, url, port, app}.',
         );
         process.exit(0);
       }
-      const p = parsed.port ?? (await detectCdpPort());
-      const targets = await listTargets(p);
-      const pages = targets.filter((t) => t.type === 'page');
-      console.log(JSON.stringify(pages.map((t) => ({
-        id: t.id,
-        title: t.title,
-        url: t.url,
-      })), null, 2));
-      console.error(
-        `\n${pages.length} tab${pages.length !== 1 ? 's' : ''} on port ${p}.` +
-          `\n\nTarget a tab with: --target <id>  (parallel-safe)` +
-          `\n                or: --url <pattern> (fuzzy match)`,
-      );
+      if (parsed.port) {
+        // Single port mode
+        const targets = await listTargets(parsed.port);
+        const pages = targets.filter((t) => t.type === 'page');
+        console.log(JSON.stringify(pages.map((t) => ({
+          id: t.id,
+          title: t.title,
+          url: t.url,
+        })), null, 2));
+        console.error(
+          `\n${pages.length} tab${pages.length !== 1 ? 's' : ''} on port ${parsed.port}.` +
+            `\n\nTarget a tab with: --target <id>  (parallel-safe)` +
+            `\n                or: --url <pattern> (fuzzy match)`,
+        );
+      } else {
+        // All endpoints mode
+        const endpoints = await detectCdpPortsAsync();
+        if (endpoints.length === 0) {
+          console.error('No CDP endpoints found.');
+          process.exit(1);
+        }
+        const allPages: { id: string; title: string; url: string; port: number; app: string }[] = [];
+        await Promise.all(endpoints.map(async (ep) => {
+          try {
+            const targets = await listTargets(ep.port);
+            const pages = targets.filter((t) => t.type === 'page');
+            for (const t of pages) {
+              allPages.push({ id: t.id, title: t.title, url: t.url, port: ep.port, app: ep.app });
+            }
+          } catch {
+            // Skip endpoints that fail to respond
+          }
+        }));
+        console.log(JSON.stringify(allPages, null, 2));
+        console.error(
+          `\n${allPages.length} tab${allPages.length !== 1 ? 's' : ''} across ${endpoints.length} CDP endpoint${endpoints.length !== 1 ? 's' : ''}.` +
+            `\n\nTarget a tab with: --target <id>  (parallel-safe)` +
+            `\n                or: --url <pattern> (fuzzy match)`,
+        );
+      }
       break;
     }
 

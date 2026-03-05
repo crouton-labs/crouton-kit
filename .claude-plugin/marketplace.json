@@ -168,6 +168,19 @@
         "multi-agent",
         "workflow"
       ]
+    },
+    {
+      "name": "social",
+      "source": "./plugins/social",
+      "description": "X (Twitter) posting, engagement, and growth tools — skills, commands, and northlight integration",
+      "version": "1.0.0",
+      "keywords": [
+        "twitter",
+        "x",
+        "social",
+        "posting",
+        "growth"
+      ]
     }
   ]
 }

@@ -1770,8 +1770,16 @@ async function main() {
             await standaloneRecorder.start();
           }
 
+          // Smart wrapping: only use async IIFE when code contains `await`.
+          // Without wrapping, Runtime.evaluate returns the completion value
+          // of the last expression, handling multi-statement code naturally.
+          const needsAsyncWrap = /\bawait\b/.test(code);
+          const expression = needsAsyncWrap
+            ? `(async () => { ${code} })()`
+            : code;
+
           const evalResult = (await client.send('Runtime.evaluate', {
-            expression: `(async () => { return (${code}); })()`,
+            expression,
             awaitPromise: true,
             returnByValue: true,
           })) as {

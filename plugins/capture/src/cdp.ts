@@ -86,6 +86,7 @@ interface ParsedArgs {
   role?: string;
   into?: string;
   noScreenshot?: boolean;
+  viewport?: string;
   help?: boolean;
 }
 
@@ -402,6 +403,9 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       i++;
     } else if (arg === '--no-screenshot') {
       parsed.noScreenshot = true;
+    } else if (arg === '--viewport' && next) {
+      parsed.viewport = next;
+      i++;
     } else if (arg === '--help' || arg === '-h') {
       parsed.help = true;
     } else if (arg.startsWith('--')) {
@@ -953,8 +957,24 @@ export class CDPClient {
 // Capture Utilities
 // ============================================================================
 
-export async function captureScreenshot(client: CDPClient): Promise<Buffer> {
+export async function captureScreenshot(
+  client: CDPClient,
+  viewport?: { width: number; height: number },
+): Promise<Buffer> {
   const MAX_DIM = 1600; // headroom below Anthropic's 2000px many-image limit
+
+  // Apply viewport emulation if requested
+  if (viewport) {
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    // Let the page re-layout at the new size
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
   let screenshotOpts: Record<string, unknown> = {
     format: 'png',
     captureBeyondViewport: false,
@@ -962,10 +982,12 @@ export async function captureScreenshot(client: CDPClient): Promise<Buffer> {
 
   try {
     const metrics = (await client.send('Page.getLayoutMetrics')) as {
-      cssVisualViewport?: { clientWidth: number; clientHeight: number };
+      cssVisualViewport?: { clientWidth: number; clientHeight: number; pageX: number; pageY: number };
     };
     const vw = metrics.cssVisualViewport?.clientWidth ?? 0;
     const vh = metrics.cssVisualViewport?.clientHeight ?? 0;
+    const sx = metrics.cssVisualViewport?.pageX ?? 0;
+    const sy = metrics.cssVisualViewport?.pageY ?? 0;
 
     const dprResult = (await client.send('Runtime.evaluate', {
       expression: 'window.devicePixelRatio',
@@ -977,7 +999,7 @@ export async function captureScreenshot(client: CDPClient): Promise<Buffer> {
     const scale = actualMaxSide > MAX_DIM ? MAX_DIM / actualMaxSide : 1 / dpr;
     screenshotOpts = {
       ...screenshotOpts,
-      clip: { x: 0, y: 0, width: vw, height: vh, scale },
+      clip: { x: sx, y: sy, width: vw, height: vh, scale },
     };
   } catch {
     // Fallback: capture without downscaling
@@ -987,6 +1009,12 @@ export async function captureScreenshot(client: CDPClient): Promise<Buffer> {
     'Page.captureScreenshot',
     screenshotOpts,
   )) as { data: string };
+
+  // Reset emulation so the browser window isn't stuck at the overridden size
+  if (viewport) {
+    await client.send('Emulation.clearDeviceMetricsOverride');
+  }
+
   return Buffer.from(result.data, 'base64');
 }
 
@@ -1895,15 +1923,33 @@ async function main() {
     case 'screenshot': {
       if (parsed.help) {
         console.log(
-          'Usage: capture screenshot [--url <pattern>] [--target <id>] [--out <path>]\n\n' +
-            'Capture a screenshot of the targeted tab. Saves to --out or auto-generates a path.',
+          'Usage: capture screenshot [--url <pattern>] [--target <id>] [--out <path>] [--viewport <preset>]\n\n' +
+            'Capture a screenshot of the targeted tab. Saves to --out or auto-generates a path.\n\n' +
+            'Options:\n' +
+            '  --viewport <preset>  Viewport preset (default: desktop)\n' +
+            '                       desktop-wide  1920x1080\n' +
+            '                       desktop       1280x800\n' +
+            '                       tablet        768x1024\n' +
+            '                       mobile        390x844',
         );
         process.exit(0);
+      }
+      const VIEWPORTS: Record<string, { width: number; height: number }> = {
+        'desktop-wide': { width: 1920, height: 1080 },
+        'desktop': { width: 1280, height: 800 },
+        'tablet': { width: 768, height: 1024 },
+        'mobile': { width: 390, height: 844 },
+      };
+      const viewportName = parsed.viewport ?? 'desktop';
+      const viewport = VIEWPORTS[viewportName];
+      if (!viewport) {
+        console.error(`Unknown viewport "${viewportName}". Options: ${Object.keys(VIEWPORTS).join(', ')}`);
+        process.exit(1);
       }
       const result = await withConnection(
         parsed,
         async (client) => {
-          const png = await captureScreenshot(client);
+          const png = await captureScreenshot(client, viewport);
           const outPath = parsed.out
             ? parsed.out
             : (nextStepPath('screenshot', 'manual') ?? `/tmp/capture-screenshot-${Date.now()}.png`);
@@ -2170,6 +2216,7 @@ Options:
   --duration <secs>   Recording duration (record, default: 10)
   --settle <ms>       Settle time (navigate, default: 2000)
   --out <path>        Output path (screenshot)
+  --viewport <preset> Viewport preset: desktop-wide|desktop|tablet|mobile (default: desktop)
   --json              JSON output (a11y)
   --interactive       Interactive elements only (a11y)
   --role <role>       ARIA role filter (click)

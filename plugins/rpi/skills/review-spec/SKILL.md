@@ -31,7 +31,7 @@ Task tool parameters:
     - **Relevance**: Spec stays focused; only flag scope creep causing wasted work
     - **Edge Cases**: Error states, boundary conditions, failure modes covered
     - **Architecture Quality**: Only flag actual code smells, not preferences
-    - **Abstraction Level**: Behavioral/contractual; only flag if implementation details constrain options
+    - **Abstraction Level**: Behavioral/contractual only. Flag any internal mechanisms masquerading as requirements — step-by-step code paths, specific function threading ("ref flows through X to Y"), storage optimization decisions, or timing/lifecycle prescriptions ("generated on creation"). These should be removed from the spec entirely — the planner decides implementation.
     - **Pattern Compatibility**: Doesn't contradict CLAUDE.md or .claude/rules/
     - **Context Coverage**: Only flag if spec is huge (20+ files) and splitting helps
 

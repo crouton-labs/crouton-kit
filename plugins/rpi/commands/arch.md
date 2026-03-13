@@ -57,12 +57,22 @@ When the feature is well-defined, save to `{cwd}/.claude/specs/{topic-name}.spec
 
 **Spec format:**
 - **Summary** — One paragraph describing the feature
-- **Behavior** — External behavior: input/output mappings, preconditions/postconditions, invariants, state transitions, data shapes. Cover what's non-obvious; skip what's self-evident. Focus on decisions that would otherwise be left to implementer discretion.
-- **Architecture** (if applicable) — Key abstractions, component interactions, integration points
+- **Behavior** — Observable behavior only: what users/systems see from the outside. Input/output mappings, preconditions/postconditions, invariants, state transitions, data shapes. Cover what's non-obvious; skip what's self-evident. Focus on decisions that would otherwise be left to implementer discretion.
+- **Architecture** (if applicable) — Component boundaries and contracts between them. NOT internal mechanisms, code paths, or data flow through specific functions.
 - **Constraints** — Limitations, requirements, or boundaries
-- **Related files** — Paths to relevant existing code
+- **Related files** — Paths to relevant existing code. List files that will be involved, but do NOT annotate them with implementation instructions (e.g., don't write "oauth.controller.ts — add ref to state").
 
 **No code.** No pseudocode. No type definitions. Behavioral and contractual only.
+
+**Behavior vs mechanism — the critical distinction.** Specs describe WHAT happens, not HOW it happens internally. During investigation you'll form opinions about implementation — discard them. The planner will figure out mechanisms independently with the right context.
+- "Referral is attributed during signup" → behavior ✓ (observable outcome)
+- "ref flows through the OAuth state cookie" → mechanism ✗ (internal code path)
+- "Every org has a referral slug" → behavior ✓ (observable property)
+- "Slug auto-generated on org creation" → mechanism ✗ (timing/lifecycle is implementation)
+- "Referrer earns 500 bonus credits" → behavior ✓ (observable outcome)
+- "Increment the bonusCredits field" → mechanism ✗ (storage detail)
+
+When in doubt: if a planner couldn't reasonably choose a different approach after reading your spec, you've over-constrained it.
 
 ---
 

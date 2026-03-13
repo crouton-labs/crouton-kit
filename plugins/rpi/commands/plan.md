@@ -35,6 +35,7 @@ Create a comprehensive, actionable implementation plan based on the feature spec
    - Understand the required behavior from the spec
    - Review context docs for patterns, constraints, and integration points
    - Check `.claude/pipeline/{topic}.state.md` if it exists — this contains the spec phase's investigation findings, rejected alternatives, and handoff notes. **Do not re-explore areas already covered there.**
+   - If the spec contains implementation mechanisms (step-by-step code paths, specific function threading, storage decisions), ignore them. The spec defines *what* — you decide *how*.
    - Identify areas of complexity or risk
 
 2. **Determine plan complexity and strategy**

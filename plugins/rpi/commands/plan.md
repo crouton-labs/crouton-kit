@@ -140,6 +140,14 @@ Save the master plan to the project's .claude directory at `.claude/plans/` with
 
 For large plans with sub-plans, list the linked sub-plan documents.
 
+### Present to User
+
+After saving the plan, present two summaries so the user can orient before diving into the document:
+
+**1. ELI12 summary** — Plain language, no jargon. What are we building, what does it touch, and what's the rough shape of the work? Someone non-technical should be able to follow this. 3-5 sentences.
+
+**2. Technical summary** — For the engineer. Task breakdown, dependency order, key architectural choices, and anything surprising or non-obvious about the approach. Where the plan diverges from the spec, call it out. Bullet points, not prose.
+
 State after saving: "Plan saved to `{path}`. Would you like advisor review before implementation?"
 
 State after validation passes: "Plan validated. Clear chat and run `/rpi:implement {plan-path}`."

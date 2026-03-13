@@ -99,6 +99,14 @@ Save a decision journal to `.claude/pipeline/{topic}.state.md` capturing investi
 
 Keep it terse — 10-20 bullet points total. This is a scratchpad, not a document.
 
+### Present to User
+
+After saving the spec, present an abbreviated overview so the user can quickly verify the spec captures their intent without reading the full document:
+
+**Zoomed-out summary** — Plain language, 4-8 sentences. What the feature does, who it's for, and the key behavioral decisions. Where the spec goes deeper (edge cases, data shapes, constraints), reference those sections without restating them — e.g., "Edge cases around X are detailed in the Constraints section."
+
+The goal is a version the user can skim in 10 seconds and say "yes, that's what I want" or "no, you missed Y."
+
 ### Validate
 
 Run `/rpi:review-spec {spec-path}` to validate the spec.

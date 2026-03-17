@@ -1,3 +1,4 @@
 __pycache__/
 .drafts/
 .DS_Store
+.claude/settings.local.json

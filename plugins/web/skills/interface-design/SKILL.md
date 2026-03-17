@@ -53,6 +53,9 @@ Not "users." The actual person. Where are they when they open this? What's on th
 **What must they accomplish?**
 Not "use the dashboard." The verb. Grade these submissions. Find the broken deployment. Approve the payment. The answer determines what leads, what follows, what hides.
 
+**Would they understand what you're showing them?**
+Every piece of data on screen is a design choice. A cron expression (`0 9 * * 1-5`) means nothing to a salesperson — "Daily weekdays at 9 AM" does. A 5-column table crammed into a narrow sidebar is developer convenience, not user design — stacked cards with the essential info might serve better. Translate data into the user's language. If displaying timestamps, consider "2h ago" vs "2024-03-17T14:23:00Z." If showing status, consider "Completed in 1m 4s" vs a raw enum. The rule: if you'd have to explain a value to the user in person, you should be explaining it in the interface.
+
 **What should this feel like?**
 Say it in words that mean something. "Clean and modern" means nothing — every AI says that. Warm like a notebook? Cold like a terminal? Dense like a trading floor? Calm like a reading app? The answer shapes color, type, spacing, density — everything.
 
@@ -79,6 +82,8 @@ If another AI, given a similar prompt, would produce substantially the same outp
 This is not about being different for its own sake. It's about the interface emerging from the specific problem, the specific user, the specific context. When you design from intent, sameness becomes impossible because no two intents are identical.
 
 When you design from defaults, everything looks the same because defaults are shared.
+
+**Sameness within a page is just as deadly.** Five sections, each with an identical small gray heading and a white card with the same gray border — that's not consistency, it's monotony. Consistency means the system is coherent. Monotony means you applied the same treatment everywhere without considering what each section needs. A configuration section and a monitoring section serve different purposes — they can share a type scale and spacing system while still feeling different through background zones, density, or visual weight.
 
 ## Intent Must Be Systemic
 
@@ -159,6 +164,8 @@ This is the backbone of craft. Regardless of direction, product type, or visual 
 
 **Borders must be light but not invisible.** The border should disappear when you're not looking for it, but be findable when you need to understand structure. If borders are the first thing you notice, they're too strong. If you can't tell where regions begin and end, they're too weak.
 
+**Visual zones group related content.** Not every section needs a card. When multiple sections share a purpose — monitoring data, configuration panels, metadata — a shared background tint groups them without adding borders or boxes. A right column with `bg-muted/60` and rounded corners tells users "these things go together" without any explicit container. This is different from card elevation — zones are spatial, cards are individual. Zones say "this region," cards say "this object." Use both, but know which you're reaching for.
+
 **The squint test:** Blur your eyes at the interface. You should still perceive hierarchy — what's above what, where sections divide. But nothing should jump out. No harsh lines. No jarring color shifts. Just quiet structure.
 
 This separates professional interfaces from amateur ones. Get this wrong and nothing else matters.
@@ -189,6 +196,8 @@ Your palette should feel like it came FROM somewhere — not like it was applied
 **Beyond Warm and Cold:** Temperature is one axis. Is this quiet or loud? Dense or spacious? Serious or playful? Geometric or organic? A trading terminal and a meditation app are both "focused" — completely different kinds of focus. Find the specific quality, not the generic label.
 
 **Color Carries Meaning:** Gray builds structure. Color communicates — status, action, emphasis, identity. Unmotivated color is noise. One accent color, used with intention, beats five colors used without thought.
+
+**Defined But Unused Is Worse Than Undefined.** The most common failure isn't picking bad colors — it's defining good ones and never using them. You'll set up brand tokens, accent palettes, semantic colors in your theme, and then build every surface with `border-gray-200` and `bg-gray-50`. The tokens sit in your CSS like furniture in a showroom nobody visits. This happens because gray feels safe — it's "clean," it "doesn't distract." But an interface built entirely in zero-saturation neutrals isn't clean. It's empty. If the theme defines a brand teal, that teal should appear somewhere users can see it — a status accent, a hover tint, a section border. Not everywhere. But somewhere. The test: delete your brand tokens. Does anything on the page change? If not, you never used them.
 
 ---
 

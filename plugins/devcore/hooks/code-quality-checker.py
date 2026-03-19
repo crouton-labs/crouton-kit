@@ -92,8 +92,7 @@ def check_fallback_patterns(content: str, file_path: str) -> list[str]:
 
 def check_any_type_usage(content: str, file_path: str) -> list[str]:
     """Check for 'any' type usage in TypeScript/JavaScript."""
-    code_extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp']
-    if not any(file_path.endswith(ext) for ext in code_extensions):
+    if not file_path.endswith(('.ts', '.tsx')):
         return []
     issues = []
 

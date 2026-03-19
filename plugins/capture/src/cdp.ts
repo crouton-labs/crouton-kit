@@ -1707,8 +1707,8 @@ async function main() {
         })), null, 2));
         console.error(
           `\n${pages.length} tab${pages.length !== 1 ? 's' : ''} on port ${parsed.port}.` +
-            `\n\nTarget a tab with: --target <id>  (parallel-safe)` +
-            `\n                or: --url <pattern> (fuzzy match)`,
+            `\n\nTarget a tab with: --target <id prefix>  (first 8 chars sufficient)` +
+            `\n                or: --url <pattern>     (fuzzy match)`,
         );
       } else {
         // All endpoints mode
@@ -1732,8 +1732,8 @@ async function main() {
         console.log(JSON.stringify(allPages, null, 2));
         console.error(
           `\n${allPages.length} tab${allPages.length !== 1 ? 's' : ''} across ${endpoints.length} CDP endpoint${endpoints.length !== 1 ? 's' : ''}.` +
-            `\n\nTarget a tab with: --target <id>  (parallel-safe)` +
-            `\n                or: --url <pattern> (fuzzy match)`,
+            `\n\nTarget a tab with: --target <id prefix>  (first 8 chars sufficient)` +
+            `\n                or: --url <pattern>     (fuzzy match)`,
         );
       }
       break;

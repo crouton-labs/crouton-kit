@@ -54,11 +54,6 @@ def check_backwards_compat_patterns(content: str, file_path: str) -> list[str]:
     """Check for backwards compatibility and legacy patterns - these are BLOCKING errors."""
     issues = []
 
-    # Only check code files (not markdown, yaml, json, etc.)
-    code_extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp']
-    if not any(file_path.endswith(ext) for ext in code_extensions):
-        return issues
-
     # These patterns are NEVER acceptable unless user explicitly requested them
     blocking_patterns = [
         (r'\blegacy\b', 'BLOCKED: Legacy code pattern detected'),
@@ -95,8 +90,11 @@ def check_fallback_patterns(content: str, file_path: str) -> list[str]:
 
     return issues
 
-def check_any_type_usage(content: str) -> list[str]:
+def check_any_type_usage(content: str, file_path: str) -> list[str]:
     """Check for 'any' type usage in TypeScript/JavaScript."""
+    code_extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp']
+    if not any(file_path.endswith(ext) for ext in code_extensions):
+        return []
     issues = []
 
     # More sophisticated pattern to catch 'any' as a type
@@ -179,7 +177,7 @@ def main():
     # Collect warning issues
     warning_issues = []
     warning_issues.extend(check_fallback_patterns(content, file_path))
-    warning_issues.extend(check_any_type_usage(content))
+    warning_issues.extend(check_any_type_usage(content, file_path))
 
     # Handle backwards compat issues - ABORT IMMEDIATELY
     if compat_issues:

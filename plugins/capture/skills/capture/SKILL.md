@@ -42,7 +42,7 @@ capture har create|read|delete         Manage HAR recordings
 
 ## Key Behaviors
 
-- **Targeting**: `--target <id>` (preferred, parallel-safe) or `--url <pattern>` (fuzzy match)
+- **Targeting**: `--target <id>` (preferred, parallel-safe) or `--url <pattern>` (fuzzy match). Target IDs support **prefix matching** — use the first 8 characters instead of the full ID (e.g. `--target 6d82f8c1`).
 - **Auto-screenshots**: `click` and `type` save numbered screenshots to the session automatically. Use `--no-screenshot` to skip.
 - **HAR recording**: Use `--har <id>` with `exec` or `navigate` to append network traffic. Or `--record` with `exec` for standalone HAR.
 - **exec supports await**: `capture exec 'await fetch("/api/data").then(r => r.json())'`

@@ -30,6 +30,8 @@
  *   --duration <secs>   Recording duration (record, default: 10)
  *   --settle <ms>       Settle time after navigation (navigate, default: 2000)
  *   --out <path>        Output path (screenshot)
+ *   --height <px>       Override viewport height (screenshot)
+ *   --full-page         Capture entire scrollable page (screenshot)
  *   --json              JSON output (a11y)
  *   --interactive       Interactive elements only (a11y)
  */
@@ -87,6 +89,8 @@ interface ParsedArgs {
   into?: string;
   noScreenshot?: boolean;
   viewport?: string;
+  fullPage?: boolean;
+  height?: number;
   help?: boolean;
 }
 
@@ -130,6 +134,10 @@ export class HARRecorder {
   private responses = new Map<string, NetworkResponse>();
 
   constructor(private client: CDPClient) {}
+
+  get responseCount(): number {
+    return this.responses.size;
+  }
 
   async start(): Promise<void> {
     await this.client.send('Network.enable');
@@ -207,9 +215,10 @@ export class HARRecorder {
   }
 
   async finish(): Promise<{ log: { entries: HAREntry[] } }> {
-    // Fetch response bodies
-    for (const [reqId, resp] of this.responses) {
-      try {
+    // Fetch response bodies in parallel — sequential fetches with 5s timeouts
+    // were causing ~50s hangs when many responses had evicted bodies
+    await Promise.allSettled(
+      Array.from(this.responses.entries()).map(async ([reqId, resp]) => {
         const bodyResult = (await this.client.send('Network.getResponseBody', {
           requestId: reqId,
         }, 5000)) as {
@@ -219,10 +228,8 @@ export class HARRecorder {
         resp.body = bodyResult.base64Encoded
           ? Buffer.from(bodyResult.body, 'base64').toString()
           : bodyResult.body;
-      } catch {
-        // Body may not be available
-      }
-    }
+      }),
+    );
 
     return this.buildHar();
   }
@@ -405,6 +412,11 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       parsed.noScreenshot = true;
     } else if (arg === '--viewport' && next) {
       parsed.viewport = next;
+      i++;
+    } else if (arg === '--full-page') {
+      parsed.fullPage = true;
+    } else if (arg === '--height' && next) {
+      parsed.height = parseInt(next, 10);
       i++;
     } else if (arg === '--help' || arg === '-h') {
       parsed.help = true;
@@ -825,7 +837,22 @@ export async function findTabById(
   targetId: string,
 ): Promise<CDPTarget | null> {
   const targets = await listTargets(port);
-  return targets.find((t) => t.id === targetId) ?? null;
+  // Exact match first
+  const exact = targets.find((t) => t.id === targetId);
+  if (exact) return exact;
+  // Prefix match (min 4 chars to avoid ambiguity)
+  if (targetId.length >= 4) {
+    const prefix = targetId.toUpperCase();
+    const matches = targets.filter((t) => t.id.toUpperCase().startsWith(prefix));
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      throw new Error(
+        `Ambiguous target prefix "${targetId}" matches ${matches.length} tabs:\n` +
+          matches.map((t) => `  ${t.id.slice(0, 8)}  ${t.url}`).join('\n'),
+      );
+    }
+  }
+  return null;
 }
 
 export async function openTab(port: number, url: string): Promise<CDPTarget> {
@@ -960,6 +987,7 @@ export class CDPClient {
 export async function captureScreenshot(
   client: CDPClient,
   viewport?: { width: number; height: number },
+  options?: { fullPage?: boolean },
 ): Promise<Buffer> {
   const MAX_DIM = 1600; // headroom below Anthropic's 2000px many-image limit
 
@@ -972,6 +1000,23 @@ export async function captureScreenshot(
       mobile: false,
     });
     // Let the page re-layout at the new size
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
+  // For full-page capture, resize viewport to the full content height
+  if (options?.fullPage) {
+    const layoutMetrics = (await client.send('Page.getLayoutMetrics')) as {
+      contentSize?: { width: number; height: number };
+      cssVisualViewport?: { clientWidth: number };
+    };
+    const contentWidth = layoutMetrics.cssVisualViewport?.clientWidth ?? viewport?.width ?? 1280;
+    const contentHeight = layoutMetrics.contentSize?.height ?? viewport?.height ?? 800;
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: contentWidth,
+      height: Math.ceil(contentHeight),
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
     await new Promise((r) => setTimeout(r, 150));
   }
 
@@ -1011,7 +1056,7 @@ export async function captureScreenshot(
   )) as { data: string };
 
   // Reset emulation so the browser window isn't stuck at the overridden size
-  if (viewport) {
+  if (viewport || options?.fullPage) {
     await client.send('Emulation.clearDeviceMetricsOverride');
   }
 
@@ -1353,9 +1398,11 @@ export async function navigateAndRecord(
 
         har = await recorder.finish();
       })(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('__navigate_timeout__')), deadline - (Date.now() - t0)),
-      ),
+      new Promise<never>((_, reject) => {
+        const t = setTimeout(() => reject(new Error('__navigate_timeout__')), deadline - (Date.now() - t0));
+        // Don't keep process alive just for the deadline timer
+        if (typeof t === 'object' && 'unref' in t) t.unref();
+      }),
     ]);
   } catch (err) {
     if (err instanceof Error && err.message === '__navigate_timeout__') {
@@ -1720,9 +1767,9 @@ async function main() {
       }, null, 2));
       console.error(
         `\nOpened: ${tab.title || url}` +
-          `\n\nNext: capture exec "<js>" --port ${p} --target ${tab.id}` +
-          `\n      capture screenshot --port ${p} --target ${tab.id}` +
-          `\n      capture a11y --port ${p} --target ${tab.id}`,
+          `\n\nNext: capture exec "<js>" --port ${p} --target ${tab.id.slice(0, 8)}` +
+          `\n      capture screenshot --port ${p} --target ${tab.id.slice(0, 8)}` +
+          `\n      capture a11y --port ${p} --target ${tab.id.slice(0, 8)}`,
       );
       break;
     }
@@ -1878,7 +1925,7 @@ async function main() {
 
       console.log(JSON.stringify({ id: tab.id, url: tab.url, port: p }, null, 2));
       console.error(`\nNew tab opened. Session context updated.`);
-      console.error(`Use --target ${tab.id} if passing target explicitly.`);
+      console.error(`Use --target ${tab.id.slice(0, 8)} if passing target explicitly.`);
       break;
     }
 
@@ -1931,14 +1978,16 @@ async function main() {
     case 'screenshot': {
       if (parsed.help) {
         console.log(
-          'Usage: capture screenshot [--url <pattern>] [--target <id>] [--out <path>] [--viewport <preset>]\n\n' +
+          'Usage: capture screenshot [--url <pattern>] [--target <id>] [--out <path>] [--viewport <preset>] [--height <px>] [--full-page]\n\n' +
             'Capture a screenshot of the targeted tab. Saves to --out or auto-generates a path.\n\n' +
             'Options:\n' +
             '  --viewport <preset>  Viewport preset (default: desktop)\n' +
             '                       desktop-wide  1920x1080\n' +
             '                       desktop       1280x800\n' +
             '                       tablet        768x1024\n' +
-            '                       mobile        390x844',
+            '                       mobile        390x844\n' +
+            '  --height <px>        Override viewport height (e.g. 1600)\n' +
+            '  --full-page          Capture the entire scrollable page',
         );
         process.exit(0);
       }
@@ -1954,10 +2003,14 @@ async function main() {
         console.error(`Unknown viewport "${viewportName}". Options: ${Object.keys(VIEWPORTS).join(', ')}`);
         process.exit(1);
       }
+      // Allow --height to override the viewport preset height
+      if (parsed.height) {
+        viewport.height = parsed.height;
+      }
       const result = await withConnection(
         parsed,
         async (client) => {
-          const png = await captureScreenshot(client, viewport);
+          const png = await captureScreenshot(client, viewport, { fullPage: parsed.fullPage });
           const outPath = parsed.out
             ? parsed.out
             : (nextStepPath('screenshot', 'manual') ?? `/tmp/capture-screenshot-${Date.now()}.png`);
@@ -2225,6 +2278,8 @@ Options:
   --settle <ms>       Settle time (navigate, default: 2000)
   --out <path>        Output path (screenshot)
   --viewport <preset> Viewport preset: desktop-wide|desktop|tablet|mobile (default: desktop)
+  --height <px>       Override viewport height (screenshot)
+  --full-page         Capture entire scrollable page (screenshot)
   --json              JSON output (a11y)
   --interactive       Interactive elements only (a11y)
   --role <role>       ARIA role filter (click)

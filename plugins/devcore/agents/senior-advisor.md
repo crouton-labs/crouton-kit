@@ -3,6 +3,7 @@ name: senior-advisor
 description: >
   Expert analysis agent. Use for plan review, debugging hard problems, or architectural decisions. Read-only.
 model: opus
+effort: high
 color: orange
 ---
 

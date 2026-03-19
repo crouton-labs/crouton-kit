@@ -2,6 +2,7 @@
 name: programmer
 description: Implementation agent for multi-file features. Analyzes patterns first, then implements. Use multiple when implementing independent tasks. 
 model: sonnet
+effort: medium
 color: blue
 ---
 

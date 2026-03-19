@@ -21,7 +21,6 @@
  * Options:
  *   --port <port>       Override CDP port (auto-detects if not specified)
  *   --target <tabId>    Target tab by exact ID (preferred, parallel-safe)
- *   --url <pattern>     Target tab by URL pattern (fuzzy match)
  *   --new               Force open a new tab (open command)
  *   --record            Enable HAR recording (exec)
  *   --har <id>          Append traffic to a HAR recording
@@ -72,7 +71,6 @@ interface ParsedArgs {
   command: string;
   positional: string[];
   port?: number;
-  url?: string;
   out?: string;
   json?: boolean;
   interactive?: boolean;
@@ -122,6 +120,7 @@ const SKIP_EXTENSIONS =
   /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot|css|mp4|webm|mp3)(\?|$)/i;
 const SKIP_DOMAINS =
   /(google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|px\.ads|analytics|tracking|beacon|telemetry)/i;
+const MAX_BODY_SIZE = 256 * 1024; // 256KB per response body in HAR
 
 function shouldRecordRequest(url: string): boolean {
   if (SKIP_EXTENSIONS.test(url)) return false;
@@ -225,9 +224,12 @@ export class HARRecorder {
           body: string;
           base64Encoded: boolean;
         };
-        resp.body = bodyResult.base64Encoded
+        const decoded = bodyResult.base64Encoded
           ? Buffer.from(bodyResult.body, 'base64').toString()
           : bodyResult.body;
+        resp.body = decoded.length > MAX_BODY_SIZE
+          ? decoded.slice(0, MAX_BODY_SIZE) + `\n[truncated: ${decoded.length} bytes]`
+          : decoded;
       }),
     );
 
@@ -329,7 +331,22 @@ function writeHarAndPrintSummary(
   if (har.log.entries.length === 0 && !harOutPath) return undefined;
 
   const harPath = harOutPath ?? `/tmp/capture-har-${Date.now()}.json`;
-  fs.writeFileSync(harPath, JSON.stringify(har, null, 2));
+  try {
+    fs.writeFileSync(harPath, JSON.stringify(har, null, 2));
+  } catch (err) {
+    // Fallback: strip response bodies and retry
+    const stripped = {
+      log: {
+        ...har.log,
+        entries: har.log.entries.map((e) => ({
+          ...e,
+          response: { ...e.response, content: { text: '[body stripped — too large to serialize]' } },
+        })),
+      },
+    };
+    fs.writeFileSync(harPath, JSON.stringify(stripped, null, 2));
+    console.error('  WARNING: Response bodies stripped from HAR (too large to serialize)');
+  }
 
   // Print summary to stderr
   const errors = har.log.entries.filter((e) => e.response.status >= 400);
@@ -367,9 +384,6 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
     if (arg === '--port' && next) {
       parsed.port = parseInt(next, 10);
-      i++;
-    } else if (arg === '--url' && next) {
-      parsed.url = next;
       i++;
     } else if (arg === '--out' && next) {
       parsed.out = next;
@@ -429,7 +443,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   }
 
   // Fill gaps from environment variables (set by pipeline orchestrators)
-  if (!parsed.target && !parsed.url && process.env.CDP_TARGET) {
+  if (!parsed.target && process.env.CDP_TARGET) {
     parsed.target = process.env.CDP_TARGET;
   }
   if (!parsed.har && process.env.CDP_HAR_ID) {
@@ -440,7 +454,7 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   const session = getActiveSession();
   if (session) {
     if (!parsed.har && session.harId) parsed.har = session.harId;
-    if (!parsed.target && !parsed.url && session.targetId) parsed.target = session.targetId;
+    if (!parsed.target && session.targetId) parsed.target = session.targetId;
   }
 
   return parsed as ParsedArgs;
@@ -457,27 +471,19 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 async function connectForCommand(
   parsed: ParsedArgs,
 ): Promise<{ client: CDPClient; tab: CDPTarget }> {
-  if (!parsed.target && !parsed.url) {
-    throw new Error('Use --target <tabId> or --url <pattern> to target a tab.');
+  if (!parsed.target) {
+    throw new Error('Use --target <tabId> to target a tab. Run "capture list" to see available tabs.');
   }
 
   // If --port is explicit, search only that port. Otherwise search all endpoints.
   let tab: CDPTarget | null = null;
   if (parsed.port) {
-    if (parsed.target) {
-      tab = await findTabById(parsed.port, parsed.target);
-    } else {
-      tab = await findTab(parsed.port, parsed.url);
-    }
+    tab = await findTabById(parsed.port, parsed.target);
   } else {
     const endpoints = await detectCdpPortsAsync();
     for (const ep of endpoints) {
       try {
-        if (parsed.target) {
-          tab = await findTabById(ep.port, parsed.target);
-        } else {
-          tab = await findTab(ep.port, parsed.url);
-        }
+        tab = await findTabById(ep.port, parsed.target);
         if (tab) break;
       } catch {
         // Skip endpoints that fail
@@ -486,11 +492,9 @@ async function connectForCommand(
   }
 
   if (!tab) {
-    const query = parsed.target
-      ? `target ID "${parsed.target}"`
-      : `"${parsed.url}"`;
+    const query = parsed.target;
     throw new Error(
-      `No tab found matching ${query}. Tab may have been closed or page not open.`,
+      `No tab found for target "${query}". Run "capture list" to see available tabs.`,
     );
   }
 
@@ -1123,7 +1127,6 @@ export async function getAccessibilityTree(
 
 export interface ExecuteOptions {
   port?: number;
-  urlPattern?: string;
   targetId?: string;
   record?: boolean;
   harOutPath?: string;
@@ -1144,28 +1147,17 @@ export async function executeInBrowser(
 ): Promise<ExecuteResult> {
   const port = options.port ?? (await detectCdpPort());
 
-  // Find or open tab — prefer targetId (exact) over urlPattern (fuzzy)
+  if (!options.targetId) {
+    throw new Error('Use --target <tabId> to target a tab. Run "capture list" to see available tabs.');
+  }
+
+  // Find tab by exact/prefix ID
   let tab: CDPTarget | null = null;
-  if (options.targetId) {
-    tab = await findTabById(port, options.targetId);
-    if (!tab) {
-      throw new Error(
-        `No tab found with target ID "${options.targetId}". Tab may have been closed.`,
-      );
-    }
-  } else {
-    tab = await findTab(port, options.urlPattern);
-    if (!tab) {
-      if (options.urlPattern?.startsWith('http')) {
-        tab = await openTab(port, options.urlPattern);
-        // Wait for page to load
-        await new Promise((r) => setTimeout(r, 2000));
-      } else {
-        throw new Error(
-          `No tab found matching "${options.urlPattern}". Open the page first or provide a full URL.`,
-        );
-      }
-    }
+  tab = await findTabById(port, options.targetId);
+  if (!tab) {
+    throw new Error(
+      `No tab found for target "${options.targetId}". Run "capture list" to see available tabs.`,
+    );
   }
 
   if (!tab.webSocketDebuggerUrl) {
@@ -1247,7 +1239,6 @@ export async function executeInBrowser(
 
 export interface RecordOptions {
   port?: number;
-  urlPattern?: string;
   targetId?: string;
   duration?: number;
   harOutPath?: string;
@@ -1265,22 +1256,17 @@ export async function recordTraffic(
   const port = options.port ?? (await detectCdpPort());
   const duration = options.duration ?? 10;
 
-  let tab: CDPTarget | null = null;
-  if (options.targetId) {
-    tab = await findTabById(port, options.targetId);
-    if (!tab) {
-      throw new Error(
-        `No tab found with target ID "${options.targetId}". Tab may have been closed.`,
-      );
-    }
-  } else {
-    tab = await findTab(port, options.urlPattern);
-    if (!tab) {
-      throw new Error(
-        `No tab found matching "${options.urlPattern}". Open the page first.`,
-      );
-    }
+  if (!options.targetId) {
+    throw new Error('Use --target <tabId> to target a tab. Run "capture list" to see available tabs.');
   }
+
+  const tab = await findTabById(port, options.targetId);
+  if (!tab) {
+    throw new Error(
+      `No tab found for target "${options.targetId}". Run "capture list" to see available tabs.`,
+    );
+  }
+
   if (!tab.webSocketDebuggerUrl) {
     throw new Error('Tab has no WebSocket debugger URL');
   }
@@ -1707,8 +1693,7 @@ async function main() {
         })), null, 2));
         console.error(
           `\n${pages.length} tab${pages.length !== 1 ? 's' : ''} on port ${parsed.port}.` +
-            `\n\nTarget a tab with: --target <id prefix>  (first 8 chars sufficient)` +
-            `\n                or: --url <pattern>     (fuzzy match)`,
+            `\n\nTarget a tab with: --target <id prefix>  (first 8 chars sufficient)`,
         );
       } else {
         // All endpoints mode
@@ -1732,8 +1717,7 @@ async function main() {
         console.log(JSON.stringify(allPages, null, 2));
         console.error(
           `\n${allPages.length} tab${allPages.length !== 1 ? 's' : ''} across ${endpoints.length} CDP endpoint${endpoints.length !== 1 ? 's' : ''}.` +
-            `\n\nTarget a tab with: --target <id prefix>  (first 8 chars sufficient)` +
-            `\n                or: --url <pattern>     (fuzzy match)`,
+            `\n\nTarget a tab with: --target <id prefix>  (first 8 chars sufficient)`,
         );
       }
       break;
@@ -1777,13 +1761,13 @@ async function main() {
     case 'exec': {
       if (parsed.help) {
         console.log(
-          'Usage: capture exec <code> [--url <pattern>] [--target <id>] [--record] [--file <path>] [--har <id>]\n\n' +
+          'Usage: capture exec <code> [--target <id>] [--record] [--file <path>] [--har <id>]\n\n' +
             'Execute JavaScript in a browser tab. Supports await (wrapped in async IIFE).\n\n' +
             'Examples:\n' +
-            '  capture exec "document.title" --url example\n' +
-            '  capture exec "await fetch(\'/api/data\').then(r=>r.json())" --url example\n' +
+            '  capture exec "document.title" --target <id>\n' +
+            '  capture exec "await fetch(\'/api/data\').then(r=>r.json())" --target <id>\n' +
             '  capture exec "document.querySelector(\'.btn\').click()" --target <id>\n' +
-            '  capture exec --file /tmp/scrape.js --url example --record',
+            '  capture exec --file /tmp/scrape.js --target <id> --record',
         );
         process.exit(0);
       }
@@ -1795,11 +1779,11 @@ async function main() {
         if (!code) {
           console.error(
             'ERROR: Missing code to execute.\n\n' +
-              'Usage: capture exec <code> [--url <pattern>] [--target <id>] [--record] [--file <path>]\n\n' +
+              'Usage: capture exec <code> [--target <id>] [--record] [--file <path>]\n\n' +
               'Examples:\n' +
-              '  capture exec "document.title" --url example\n' +
+              '  capture exec "document.title" --target <id>\n' +
               '  capture exec "document.querySelector(\'.btn\').click()" --target <id>\n' +
-              '  capture exec --file /tmp/scrape.js --url example --record',
+              '  capture exec --file /tmp/scrape.js --target <id> --record',
           );
           process.exit(1);
         }
@@ -1856,21 +1840,20 @@ async function main() {
     case 'record': {
       if (parsed.help) {
         console.log(
-          'Usage: capture record --url <pattern> [--duration <secs>] [--har-out <path>]\n\n' +
+          'Usage: capture record --target <id> [--duration <secs>] [--har-out <path>]\n\n' +
             'Passive HAR recording for the specified duration (default: 10s).',
         );
         process.exit(0);
       }
-      if (!parsed.url && !parsed.target) {
+      if (!parsed.target) {
         console.error(
-          'Usage: capture record --url <pattern> [--duration <secs>] [--har-out <path>]',
+          'Usage: capture record --target <id> [--duration <secs>] [--har-out <path>]',
         );
         process.exit(1);
       }
 
       const result = await recordTraffic({
         port: parsed.port,
-        urlPattern: parsed.url,
         targetId: parsed.target,
         duration: parsed.duration,
         harOutPath: parsed.harOut,
@@ -1978,7 +1961,7 @@ async function main() {
     case 'screenshot': {
       if (parsed.help) {
         console.log(
-          'Usage: capture screenshot [--url <pattern>] [--target <id>] [--out <path>] [--viewport <preset>] [--height <px>] [--full-page]\n\n' +
+          'Usage: capture screenshot [--target <id>] [--out <path>] [--viewport <preset>] [--height <px>] [--full-page]\n\n' +
             'Capture a screenshot of the targeted tab. Saves to --out or auto-generates a path.\n\n' +
             'Options:\n' +
             '  --viewport <preset>  Viewport preset (default: desktop)\n' +
@@ -2085,7 +2068,7 @@ async function main() {
     case 'a11y': {
       if (parsed.help) {
         console.log(
-          'Usage: capture a11y [--url <pattern>] [--target <id>] [--json] [--interactive]\n\n' +
+          'Usage: capture a11y [--target <id>] [--json] [--interactive]\n\n' +
             'Get the accessibility tree. Use --interactive for interactive elements only.\n' +
             'Use --json for structured JSON output.',
         );
@@ -2207,7 +2190,7 @@ async function main() {
     case 'network': {
       if (parsed.help) {
         console.log(
-          'Usage: capture network <offline|online> [--target <id>] [--url <pattern>]\n\n' +
+          'Usage: capture network <offline|online> [--target <id>]\n\n' +
             'Toggle network connectivity for a tab. Use "offline" to simulate\n' +
             'network failure (kills WebSocket connections, blocks HTTP requests).\n' +
             'Use "online" to restore connectivity.',
@@ -2216,7 +2199,7 @@ async function main() {
       }
       const mode = parsed.positional[0];
       if (!mode || !['offline', 'online'].includes(mode)) {
-        console.error('Usage: capture network <offline|online> [--target <id>] [--url <pattern>]');
+        console.error('Usage: capture network <offline|online> [--target <id>]');
         process.exit(1);
       }
       const offline = mode === 'offline';
@@ -2268,7 +2251,6 @@ Commands:
 Options:
   --port <port>       Override CDP port
   --target <tabId>    Target tab by exact ID (preferred, parallel-safe)
-  --url <pattern>     Target tab by URL pattern (fuzzy match)
   --new               Force new tab (open)
   --record            Enable HAR recording (exec)
   --har <id>          Append traffic to a HAR recording
@@ -2292,16 +2274,16 @@ Examples:
   capture detect
   capture list
   capture open "https://app.example.com" --new
-  capture exec "document.title" --url example
-  capture exec "document.querySelector('.btn').click()" --url example
-  capture exec "fetch('/api/data').then(r=>r.json())" --url example --record
-  capture exec --file /tmp/scrape.js --url example
-  capture screenshot --url example --out /tmp/shot.png
-  capture a11y --url example --interactive
-  capture record --url example --duration 15
+  capture exec "document.title" --target <id>
+  capture exec "document.querySelector('.btn').click()" --target <id>
+  capture exec "fetch('/api/data').then(r=>r.json())" --target <id> --record
+  capture exec --file /tmp/scrape.js --target <id>
+  capture screenshot --target <id> --out /tmp/shot.png
+  capture a11y --target <id> --interactive
+  capture record --target <id> --duration 15
   capture navigate "https://app.example.com/dashboard"
   capture har create
-  capture exec "document.querySelector('form').submit()" --url example --har <id>
+  capture exec "document.querySelector('form').submit()" --target <id> --har <id>
   capture har read <id>
 `);
   }

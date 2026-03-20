@@ -23,11 +23,25 @@ From the team lead: file scope, plan/spec paths, assigned concern areas, and nam
 
 ## Concern Areas
 
-- **Correctness** — Logic Bugs, Edge Cases, Security, Error Paths
+- **Correctness** — Logic bugs, edge cases, security, error paths
 - **Compliance** — CLAUDE.md/rules conformance
-- **Structural Waste** — Unnecessary abstraction, cargo-culted patterns, clever-but-confusing code
+- **Structural Waste** — Unnecessary abstraction, cargo-culted patterns, clever-but-confusing code. Specific anti-patterns to flag:
+  - Redundant state (duplicates existing state, cached values that could be derived, observers/effects that could be direct calls)
+  - Parameter sprawl (adding parameters instead of generalizing or restructuring)
+  - Copy-paste with slight variation (near-duplicate blocks that should be unified)
+  - Leaky abstractions (exposing internals, breaking existing abstraction boundaries)
+  - Stringly-typed code (raw strings where constants, enums, or branded types already exist in the codebase)
+- **Reuse** — Search for existing utilities and helpers that new code duplicates. Flag inline logic that reimplements what a shared module already provides (string manipulation, path handling, type guards, env checks, etc.)
 - **Dead Code** — Unused code, unreachable logic, duplication
 - **Integration** — Do pieces connect cleanly? Consistent patterns across slices? Code smells?
+- **Efficiency** — Unnecessary work and resource waste in new code:
+  - Redundant computation, repeated file reads, duplicate network/API calls, N+1 patterns
+  - Independent operations run sequentially when they could be parallel
+  - Blocking work added to startup or per-request/per-render hot paths
+  - Unconditional state/store updates in polling loops, intervals, or event handlers — flag missing change-detection guards
+  - Pre-checking file/resource existence before operating (TOCTOU) — operate directly, handle the error
+  - Unbounded data structures, missing cleanup, event listener leaks
+  - Overly broad operations (reading entire files/collections when only a portion is needed)
 
 The lead assigns you a subset. Focus only on your assigned areas.
 
@@ -36,7 +50,7 @@ The lead assigns you a subset. Focus only on your assigned areas.
 1. **Scope** — Read plan/spec. Identify all files in your assigned scope.
 2. **Investigate** — Spawn reviewer subagents, one per concern cluster or vertical slice:
    - Scale to scope: 2-3 subagents for <10 files, 4-6 for 10-25, 6-8 for 25+
-   - Opus subagents for Logic Bugs, Security; sonnet for everything else
+   - Opus subagents for Logic Bugs, Security, Efficiency (hot-path/concurrency); sonnet for everything else
    - Each subagent: terse if clean, detailed only for real problems (`file:line`, evidence, explanation)
 3. **Validate** — Spawn validation subagents (~1 per 3 issues, clustered by file proximity):
    - Bugs/Security: opus confirms exploitable/broken

@@ -223,6 +223,10 @@ Sharper feels technical. Rounder feels friendly. Pick a scale and apply consiste
 ## Typography
 Headlines need weight and tight tracking. Body needs readability. Data needs monospace. Build a hierarchy.
 
+**Weight creates hierarchy — if you choose it.** Most AI output clusters weights in the middle where nothing stands out. Decide how much contrast your hierarchy needs and commit. The spread between your heaviest and lightest text is a design decision, not a detail.
+
+**Capitalization is a choice, not a default.** Uppercase, small-caps, sentence case — each changes how text feels and how hierarchy reads. Have an opinion. The wrong choice is not having one.
+
 ## Color & Surfaces
 Build from primitives: foreground (text hierarchy), background (surface elevation), border (separation hierarchy), brand, and semantic (destructive, warning, success). Every color should trace back to these. No random hex values — everything maps to the system.
 

@@ -2,21 +2,40 @@
 description: Hand off a task to sisyphus multi-agent orchestration
 ---
 
-!`sisyphus -h`
+!`sisyphus start -h`
 
-Run `sisyphus start` with a concise task/goal and optional background context:
+Craft a `sisyphus start` invocation from the user's request.
 
 ```bash
-sisyphus start "your task description" -c "background context"
+sisyphus start "<task>" [-c "<context>"] [-n <name>]
 ```
 
-**Task description** — the goal. Keep it focused: what needs to be built or fixed and what done looks like. This is the persistent objective the orchestrator sees every cycle.
+**Task** — the persistent goal the orchestrator sees every cycle. State what done looks like, not how to get there. Keep it focused.
 
-**Context (`-c`)** — background info that informs the work but isn't the goal itself: relevant file paths, constraints, specs, adjacent concerns, prior findings. Rendered separately so the orchestrator can reference it without confusing it with the task.
+**Context (`-c`)** — background that informs the work but isn't the goal: relevant paths, constraints, specs, prior findings. Factual, not diagnostic — don't speculate on root causes or solutions, which can bias the orchestrator.
 
-**Context should be factual, not diagnostic.** Point to relevant files, areas of the codebase, and constraints — don't speculate on root causes or solutions, which can bias the orchestrator down the wrong path.
+**Name (`-n`)** — short human-readable label for the session (shows in `sisyphus list` and the dashboard). Pick something scannable.
 
-**Example:**
+**File references** — use `@path/to/file` in the task to point the orchestrator at specs, designs, or relevant code. It will read them on first cycle.
+
+**Examples:**
+
 ```bash
-sisyphus start "Fix the JWT refresh bug — app shows blank screen on token expiry instead of redirecting to login" -c "Auth system lives in src/auth/. Key files: interceptor.ts (HTTP interceptor), token-store.ts (token persistence), refresh.ts (refresh flow). Tests in src/auth/__tests__/. Don't break the logout flow."
+# Bug fix — symptom + relevant area
+sisyphus start "Fix blank screen on JWT token expiry — should redirect to login" \
+  -c "Auth in src/auth/: interceptor.ts, token-store.ts, refresh.ts. Don't break logout." \
+  -n jwt-refresh
+
+# Feature from a spec
+sisyphus start "Build the notification system per @docs/notifications-spec.md" -n notifications
+
+# Investigation
+sisyphus start "Figure out why cold-start latency spiked 3x after the Redis migration" \
+  -c "Dashboards show p99 went from 200ms to 600ms starting March 15. Relevant: src/cache/, src/startup/." \
+  -n cold-start-spike
 ```
+
+**After starting**, useful follow-up commands:
+- `sisyphus message "<msg>"` — queue a message the orchestrator sees next cycle (corrections, new context, priority changes)
+- `sisyphus status` / `sisyphus dashboard` — monitor progress
+- `sisyphus resume <id> "<msg>"` — restart a paused or completed session with new instructions

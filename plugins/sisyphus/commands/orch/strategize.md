@@ -6,33 +6,14 @@ argument-hint: <new direction or focus>
 
 **Input:** $ARGUMENTS
 
-The user wants to redirect this session's strategy. Parse their input for the new direction, focus, or concern they want to address.
+The user wants to redirect this session's strategy.
 
 ## Steps
 
-### 1. Reactivate if Completed
-
-Check session status with `sisyphus status`. If the session is completed:
-
-```bash
-sisyphus continue
-```
-
-This clears the roadmap and reactivates the session so you can redirect.
-
-### 2. Capture the Pivot
-
-Update `strategy.md` with a new entry noting the strategic redirect:
-- What changed and why
-- What the new focus is
-- Which existing artifacts (context files, prior work) are still relevant
-
-Don't rewrite the whole strategy — annotate the pivot point so the respawned orchestrator understands the shift.
-
-### 3. Yield to Strategy Mode
-
-```bash
-sisyphus yield --mode strategy --prompt "<concise description of the new direction>"
-```
-
-This kills the current orchestrator and respawns a fresh instance in strategy mode with the updated strategy.md. The respawned orchestrator will re-evaluate the goal, stages, and approach from the new perspective.
+1. If the session is completed (`sisyphus status`), reactivate it with `sisyphus continue`.
+2. Annotate `strategy.md` with the pivot — what changed, new focus, which existing artifacts still apply. Don't rewrite the whole strategy.
+3. Yield to strategy mode:
+   ```bash
+   sisyphus yield --mode strategy --prompt "<concise description of the new direction>"
+   ```
+   This respawns a fresh orchestrator that will re-evaluate the goal, stages, and approach.

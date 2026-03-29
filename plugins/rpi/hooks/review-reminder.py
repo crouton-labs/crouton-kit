@@ -1,9 +1,37 @@
 #!/usr/bin/env python3
 """
-Stop hook that reminds to run review skills after editing .spec.md or .plan.md files.
+Stop hook that reminds to run review skills after editing requirements.md or design.md
+files in specs/ directories, or .plan.md files.
 """
 import json
 import sys
+
+
+def is_specs_requirements(file_path: str) -> bool:
+    """True if the path is a requirements.md inside a specs/ directory."""
+    parts = file_path.replace("\\", "/").split("/")
+    try:
+        specs_idx = parts.index("specs")
+    except ValueError:
+        return False
+    # Must have at least one directory component after specs/ before requirements.md
+    return (
+        len(parts) > specs_idx + 2
+        and parts[-1] == "requirements.md"
+    )
+
+
+def is_specs_design(file_path: str) -> bool:
+    """True if the path is a design.md inside a specs/ directory."""
+    parts = file_path.replace("\\", "/").split("/")
+    try:
+        specs_idx = parts.index("specs")
+    except ValueError:
+        return False
+    return (
+        len(parts) > specs_idx + 2
+        and parts[-1] == "design.md"
+    )
 
 
 def main():
@@ -39,8 +67,9 @@ def main():
     if last_assistant_line < 0:
         sys.exit(0)
 
-    # Check if the last assistant turn edited spec/plan files
-    current_turn_edited_spec = False
+    # Check if the last assistant turn edited requirements/design/plan files
+    current_turn_edited_requirements = False
+    current_turn_edited_design = False
     current_turn_edited_plan = False
 
     try:
@@ -59,19 +88,23 @@ def main():
 
         if tool_name in ("Write", "Edit"):
             file_path = tool_input.get("file_path", "")
-            if file_path.endswith(".spec.md"):
-                current_turn_edited_spec = True
+            if is_specs_requirements(file_path):
+                current_turn_edited_requirements = True
+            elif is_specs_design(file_path):
+                current_turn_edited_design = True
             elif file_path.endswith(".plan.md"):
                 current_turn_edited_plan = True
 
-    # Only proceed if this turn edited spec/plan files
-    if not current_turn_edited_spec and not current_turn_edited_plan:
+    # Only proceed if this turn edited relevant files
+    if not current_turn_edited_requirements and not current_turn_edited_design and not current_turn_edited_plan:
         sys.exit(0)
 
     # Now scan full history for review skill runs after the edits
-    last_spec_edit_line = -1
+    last_requirements_edit_line = -1
+    last_design_edit_line = -1
     last_plan_edit_line = -1
-    review_spec_run_line = -1
+    review_requirements_run_line = -1
+    review_design_run_line = -1
     review_plan_run_line = -1
 
     for line_num, line in enumerate(lines):
@@ -91,36 +124,53 @@ def main():
                 tool_name = block.get("name", "")
                 tool_input = block.get("input", {})
 
-                # Check for spec/plan edits
+                # Check for requirements/design/plan edits
                 if tool_name in ("Write", "Edit"):
                     file_path = tool_input.get("file_path", "")
-                    if file_path.endswith(".spec.md"):
-                        last_spec_edit_line = line_num
+                    if is_specs_requirements(file_path):
+                        last_requirements_edit_line = line_num
+                    elif is_specs_design(file_path):
+                        last_design_edit_line = line_num
                     elif file_path.endswith(".plan.md"):
                         last_plan_edit_line = line_num
 
                 # Check for review skill invocations
                 if tool_name == "Skill":
                     skill_name = tool_input.get("skill", "")
-                    if "review-spec" in skill_name:
-                        review_spec_run_line = line_num
+                    if "review-requirements" in skill_name:
+                        review_requirements_run_line = line_num
+                    elif "review-design" in skill_name:
+                        review_design_run_line = line_num
                     elif "review-plan" in skill_name:
                         review_plan_run_line = line_num
 
     # Build messages for unvalidated edits
     messages = []
 
-    # Check spec
-    if last_spec_edit_line >= 0:
-        if review_spec_run_line < 0:
+    # Check requirements
+    if last_requirements_edit_line >= 0:
+        if review_requirements_run_line < 0:
             messages.append(
-                "You edited a .spec.md file but have not run /rpi:review-spec to validate it.\n"
-                "You MUST run `/rpi:review-spec {spec-path}` before finishing."
+                "You edited requirements but have not run /rpi:review-requirements to validate it.\n"
+                "You MUST run `/rpi:review-requirements {requirements-path}` before finishing."
             )
-        elif review_spec_run_line < last_spec_edit_line:
+        elif review_requirements_run_line < last_requirements_edit_line:
             messages.append(
-                "You edited a .spec.md file after the last /rpi:review-spec validation.\n"
-                "Consider running `/rpi:review-spec {spec-path}` again if the changes were significant."
+                "You edited requirements after the last /rpi:review-requirements validation.\n"
+                "Consider running `/rpi:review-requirements {requirements-path}` again if the changes were significant."
+            )
+
+    # Check design
+    if last_design_edit_line >= 0:
+        if review_design_run_line < 0:
+            messages.append(
+                "You edited design but have not run /rpi:review-design to validate it.\n"
+                "You MUST run `/rpi:review-design {design-path}` before finishing."
+            )
+        elif review_design_run_line < last_design_edit_line:
+            messages.append(
+                "You edited design after the last /rpi:review-design validation.\n"
+                "Consider running `/rpi:review-design {design-path}` again if the changes were significant."
             )
 
     # Check plan
@@ -128,12 +178,12 @@ def main():
         if review_plan_run_line < 0:
             messages.append(
                 "You edited a .plan.md file but have not run /rpi:review-plan to validate it.\n"
-                "You MUST run `/rpi:review-plan {spec-path} {plan-path}` before finishing."
+                "You MUST run `/rpi:review-plan {requirements-path} {design-path} {plan-path}` before finishing."
             )
         elif review_plan_run_line < last_plan_edit_line:
             messages.append(
                 "You edited a .plan.md file after the last /rpi:review-plan validation.\n"
-                "Consider running `/rpi:review-plan {spec-path} {plan-path}` again if the changes were significant."
+                "Consider running `/rpi:review-plan {requirements-path} {design-path} {plan-path}` again if the changes were significant."
             )
 
     if not messages:

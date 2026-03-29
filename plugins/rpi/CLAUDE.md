@@ -1,11 +1,11 @@
 # RPI Plugin
 
-Feature development workflow using agent teams. Full pipeline: spec, plan, implement, review, test.
+Feature development workflow using agent teams. Full pipeline: requirements, design, plan, implement, validate, test.
 
 ## Usage
 
 **Full pipeline** (agent team): `/rpi:rpi <topic>`
-**Individual phases** (standalone): `/rpi:arch`, `/rpi:plan`, `/rpi:implement`
+**Individual phases** (standalone): `/rpi:problem`, `/rpi:requirements`, `/rpi:design`, `/rpi:plan`, `/rpi:implement`, `/rpi:validate`
 
 The standalone commands work independently for partial workflows. `/rpi:rpi` orchestrates the full pipeline as a team with specialized teammates.
 
@@ -14,12 +14,17 @@ The standalone commands work independently for partial workflows. `/rpi:rpi` orc
 ### Full Pipeline (`/rpi:rpi`)
 
 ```
-Phase 1: Specification
-  Lead spawns rpi:spec-writer teammate
-  User interacts directly with spec-writer (Shift+Down)
-  Spec-writer: investigate → propose → converse → save spec → validate
+Phase 1a: Requirements
+  Lead spawns rpi:requirements-writer teammate
+  User interacts directly with requirements-writer (Shift+Down)
+  Requirements-writer: investigate → propose → converse → save requirements → validate
   Optional: fetch 3rd-party library docs, create context documents
-  Output: .claude/specs/{topic}.spec.md
+  Output: .claude/specs/{topic}/requirements.md
+
+Phase 1b: Design
+  Lead spawns rpi:design-lead teammate
+  Design-lead: reads requirements → investigates codebase → proposes architecture → converse → save design → validate
+  Output: .claude/specs/{topic}/design.md
 
 Phase 2: Planning
   Lead spawns rpi:planning-lead teammate
@@ -62,7 +67,8 @@ All teammates are opus. Cheaper models run as subagents within teammates, not as
 
 | Agent | Role | Model | Edits? |
 |-------|------|-------|--------|
-| `rpi:spec-writer` | Collaborative spec design with user | opus | Yes (specs, context) |
+| `rpi:requirements-writer` | Collaborative requirements definition with user | opus | Yes (requirements, context) |
+| `rpi:design-lead` | Technical architecture design from requirements | opus | Yes (design, context) |
 | `rpi:planning-lead` | Creates implementation + test plans | opus | Yes (plans) |
 | `devcore:teammate` | Implementation, claims tasks from shared list | opus | Yes |
 | `rpi:reviewer` | Code review + quality audit, directs fixes | opus | No (read-only) |
@@ -72,9 +78,12 @@ All teammates are opus. Cheaper models run as subagents within teammates, not as
 
 | Command | Purpose | When to use |
 |---------|---------|-------------|
-| `/rpi:arch` | Define spec through conversation | Already have a plan/team, just need a spec |
-| `/rpi:plan` | Create implementation plan from spec | Have a spec, want to plan without full pipeline |
+| `/rpi:problem` | Explore and frame the problem space (optional) | Complex or ambiguous problem domains |
+| `/rpi:requirements` | Define requirements through conversation | Need requirements without full pipeline |
+| `/rpi:design` | Create technical design from requirements | Have requirements, want architecture decisions |
+| `/rpi:plan` | Create implementation plan from design | Have design, want to plan without full pipeline |
 | `/rpi:implement` | Execute plan with agent team | Have a plan, want to implement without review/test phases |
+| `/rpi:validate` | Run validation for a topic or phase | Need to verify implementation against plan |
 | `/rpi:cleanup` | Clean up old spec/plan files | Housekeeping |
 
 Standalone commands don't create teams (except `/rpi:implement` for medium+ plans). They end with "clear chat and run the next command."
@@ -83,8 +92,9 @@ Standalone commands don't create teams (except `/rpi:implement` for medium+ plan
 
 | Skill | Triggered by | Purpose |
 |-------|-------------|---------|
-| `review-spec` | Model (after spec edits) | Validates spec quality |
-| `review-plan` | Model (after plan edits) | Validates plan covers spec |
+| `review-requirements` | Model (after requirements edits) | Validates requirements quality and completeness |
+| `review-design` | Model (after design edits) | Validates design against requirements |
+| `review-plan` | Model (after plan edits) | Validates plan covers design |
 
 The Stop hook in `hooks/` blocks session end if specs or plans were edited without running validation.
 
@@ -92,24 +102,28 @@ The Stop hook in `hooks/` blocks session end if specs or plans were edited witho
 
 ```
 .claude/
-├── specs/{topic}.spec.md                    # Behavioral specification
-├── plans/{topic}.plan.md                    # Implementation plan (team-ready)
-├── plans/{topic}.tests.plan.md              # Test plan
-├── plans/{topic}.validation.plan.md         # Validation plan (exit criteria, proof methods)
-├── plans/{topic}-{phase}.plan.md            # Sub-plans (large features)
-├── pipeline/{topic}.state.md                 # Decision journal across phases
-├── context/{topic}-{domain}.context.md      # Codebase context per domain
-├── context/{topic}-{library}.docs.md        # Third-party library docs
-├── scripts/                                 # Reusable validation scripts
-└── validation/{topic}/                      # Topic-specific validation scripts
+├── specs/{topic}/
+│   ├── problem.md                           # Problem exploration (optional)
+│   ├── requirements.md                       # EARS requirements
+│   └── design.md                             # Technical design
+├── plans/{topic}.plan.md                     # Implementation plan
+├── plans/{topic}.tests.plan.md               # Test plan
+├── plans/{topic}.validation.plan.md          # Validation plan
+├── plans/{topic}-{phase}.plan.md             # Sub-plans (large features)
+├── pipeline/{topic}.state.md                 # Decision journal
+├── context/{topic}-{domain}.context.md       # Codebase context
+├── context/{topic}-{library}.docs.md         # Library docs
+├── scripts/                                  # Reusable validation scripts
+└── validation/{topic}/                       # Topic-specific validation
 ```
 
 ## Key Design Decisions
 
 - **Teammates are opus, subagents are sonnet/haiku.** Teammates make judgment calls and coordinate. Subagents handle bounded, repetitive work.
+- **Requirements and design are separate phases.** Requirements capture non-technical behavior (EARS format); design translates them into technical architecture. Keeping them separate prevents implementation details from contaminating behavioral intent.
 - **Reviewers are read-only.** They investigate and direct fixes through implementers, never edit code themselves.
 - **Review happens per phase,** not just at the end. Catches issues before they compound in later phases.
 - **Implementation teammates stay alive through review** so reviewers can message them fix instructions directly.
 - **Test plan is separate.** Written during planning but implemented after all code passes review. Tests reference actual implementation, not just the plan.
 - **Validation creates lasting infrastructure, not throwaway scripts.** The validation-lead prioritizes reusable project tools (commands, shared scripts, debug endpoints) that future features benefit from. Topic-specific scripts supplement but don't replace shared infrastructure.
-- **Spec-writer fetches library docs.** If the feature uses unfamiliar third-party libraries, docs are gathered upfront and shared through the pipeline.
+- **Design-lead fetches library docs.** If the feature uses unfamiliar third-party libraries, docs are gathered upfront and shared through the pipeline.

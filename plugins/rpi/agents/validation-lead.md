@@ -20,11 +20,11 @@ You are the validation lead on a feature development team. You create observable
 
 ## Input
 
-From the team lead: spec path, plan path, optional context document paths.
+From the team lead: requirements path, design path, plan path, optional context document paths.
 
 ## Process
 
-1. **Read** — Load spec, plan, and context documents
+1. **Read** — Load requirements, design, plan, and context documents
 2. **Inventory** — What reusable infrastructure already exists? Check:
    - `.claude/commands/` — existing slash commands (e.g., `/headless`)
    - `.claude/scripts/` — shared scripts (service managers, port checkers, seeders)

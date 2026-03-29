@@ -1,54 +1,56 @@
 ---
-description: After /rpi/arch - create implementation plan from spec
-argument-hint: <spec-path or description>
+description: After /rpi/design - create implementation plan from requirements and design
+argument-hint: <topic name or requirements/design paths>
 ---
 # Create Implementation Plan
 
 **Input:** $ARGUMENTS
 
 Parse the input above. It may be:
-- A direct path to a spec file
-- A topic name (look in `.claude/specs/{topic}.spec.md`)
+- A topic name (resolve requirements from `.claude/specs/{topic}/requirements.md` and design from `.claude/specs/{topic}/design.md`)
+- Direct paths to requirements and/or design files
 - A description with additional context, priorities, or constraints
 
-Extract the spec reference and any guidance about what to prioritize or skip.
+Extract the requirements and design references and any guidance about what to prioritize or skip.
 
 ## Objective
 
-Create a comprehensive, actionable implementation plan based on the feature specification and codebase context.
+Create a comprehensive, actionable implementation plan based on the feature requirements, technical design, and codebase context.
 
 ## Inputs
 
-1. **Read the specification**
-   - If a path was provided, read it directly
-   - If a topic was given, look in `.claude/specs/`
-   - The spec defines *what* to build—the plan defines *how*
+1. **Read the requirements and design**
+   - If a topic was given, look in `.claude/specs/{topic}/` for `requirements.md` and `design.md`
+   - If paths were provided, read them directly
+   - Requirements define *what* to build and acceptance criteria — design defines *how* it should be structured technically
+   - The plan translates both into an ordered, team-ready execution sequence
 
 2. **Locate context documents** (if any)
    - Check `.claude/context/` for related context files
    - These are optional—only created for large multi-domain features
-   - If none exist, use the spec's "Related files" section as your context
+   - If none exist, use the design's "Related files" section as your context
 
 ## Planning Approach
 
-1. **Review spec, context, and pipeline state**
-   - Understand the required behavior from the spec
-   - Review context docs for patterns, constraints, and integration points
-   - Check `.claude/pipeline/{topic}.state.md` if it exists — this contains the spec phase's investigation findings, rejected alternatives, and handoff notes. **Do not re-explore areas already covered there.**
-   - If the spec contains implementation mechanisms (step-by-step code paths, specific function threading, storage decisions), ignore them. The spec defines *what* — you decide *how*.
+1. **Review requirements, design, context, and pipeline state**
+   - Understand the required behavior from the requirements document
+   - Use the design document for architectural decisions, patterns, and integration points
+   - Review context docs for constraints and codebase conventions
+   - Check `.claude/pipeline/{topic}.state.md` if it exists — this contains prior phases' investigation findings, rejected alternatives, and handoff notes. **Do not re-explore areas already covered there.**
+   - If the design contains implementation mechanisms that conflict with codebase patterns, flag the conflict—do not silently override either
    - Identify areas of complexity or risk
 
 2. **Determine plan complexity and strategy**
-   
+
    - **Simple plans** (1-3 files, single domain)
      - Create a single plan document with all details
-   
+
    - **Medium plans** (multiple domains, 4-10 files)
      - Spawn multiple `Plan` agents in parallel
      - Each agent focuses on a specific phase, domain, or architectural layer
      - Provide each agent with relevant context documents
      - **Synthesize their outputs into one cohesive master plan document**
-   
+
    - **Large plans** (many files, complex cross-cutting changes)
      - Create a master plan document that outlines phases, using two or more `Plan` agents
      - Delegate each phase to a `Plan` agent to create detailed sub-plans focusing on edge cases, tests, and patterns not covered in the master plan
@@ -100,7 +102,8 @@ After the plan is finalized, offer advisor review.
    - **Ambiguity**: Unresolved decisions masquerading as resolved?
 
 3. Provide each advisor:
-   - Path to spec document
+   - Path to requirements document
+   - Path to design document
    - Path to plan document (+ sub-plans if any)
 
 Scale advisor count to plan scope—larger changes warrant more review perspectives.
@@ -109,7 +112,7 @@ Scale advisor count to plan scope—larger changes warrant more review perspecti
 
 Summarize findings. Revise plan to address significant concerns.
 
-After revisions are complete, run `/rpi:review-plan {spec-path} {plan-path}` to validate coverage.
+After revisions are complete, run `/rpi:review-plan {requirements-path} {design-path} {plan-path}` to validate coverage.
 
 If validation fails, address the gaps and re-run validation.
 
@@ -146,7 +149,7 @@ After saving the plan, present two summaries so the user can orient before divin
 
 **1. ELI12 summary** — Plain language, no jargon. What are we building, what does it touch, and what's the rough shape of the work? Someone non-technical should be able to follow this.
 
-**2. Technical summary** — For the engineer. Task breakdown, dependency order, key architectural choices, and anything surprising or non-obvious about the approach. Where the plan diverges from the spec, call it out. Bullet points, not prose.
+**2. Technical summary** — For the engineer. Task breakdown, dependency order, key architectural choices, and anything surprising or non-obvious about the approach. Where the plan diverges from the requirements or design, call it out. Bullet points, not prose.
 
 State after saving: "Plan saved to `{path}`. Would you like advisor review before implementation?"
 

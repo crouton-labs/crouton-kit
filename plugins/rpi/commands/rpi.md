@@ -1,5 +1,5 @@
 ---
-description: Full feature workflow - spec, plan, implement via agent team
+description: Full feature workflow - requirements, design, plan, implement via agent team
 argument-hint: <topic or description>
 disable-model-invocation: true
 ---
@@ -8,26 +8,33 @@ disable-model-invocation: true
 
 **Input:** $ARGUMENTS
 
-You are the team lead for a full feature development workflow: specification, planning, implementation.
+You are the team lead for a full feature development workflow: requirements, design, planning, implementation.
 
-## Phase 1: Specification
+## Phase 1a: Requirements
 
 1. `TeamCreate` a team (e.g., `rpi-{topic}`)
-2. Spawn an `rpi:spec-writer` teammate with the topic/description from the input
-3. Tell the user: **"Spec-writer is ready. Switch to them (Shift+Down) to design your feature spec. They'll notify me when it's done."**
-4. Wait for the spec-writer's completion message containing the spec path, pipeline state path, and scope assessment
+2. Spawn an `rpi:requirements-writer` teammate with the topic/description from the input
+3. Tell the user: **"Requirements writer is ready. Switch to them (Shift+Down) to define your requirements. They'll notify me when it's done."**
+4. Wait for the requirements-writer's completion message containing the requirements path, pipeline state path, and scope assessment
+
+## Phase 1b: Design
+
+1. Send `shutdown_request` to the requirements-writer — it's done
+2. Spawn an `rpi:design-lead` teammate. Provide: requirements path, pipeline state path, scope assessment
+3. Tell the user: **"Design lead is ready. Switch to them (Shift+Down) to create the technical design. They'll notify me when it's done."**
+4. Wait for the design-lead's completion message containing the design path, context doc paths (if any), and updated scope assessment
+5. Send `shutdown_request` to the design-lead
 
 ## Phase 2: Planning
 
-1. Send `shutdown_request` to the spec-writer — it's done
-2. Spawn an `rpi:planning-lead` teammate. Provide: spec path, pipeline state path, context doc paths (if any), scope assessment
-3. The planning-lead works autonomously — creates plan, runs advisor review, validates
-4. Wait for its completion message containing the plan path and implementation structure
-5. Send `shutdown_request` to the planning-lead
+1. Spawn an `rpi:planning-lead` teammate. Provide: requirements path, design path, pipeline state path, context doc paths (if any), scope assessment
+2. The planning-lead works autonomously — creates plan, runs advisor review, validates
+3. Wait for its completion message containing the plan path and implementation structure
+4. Send `shutdown_request` to the planning-lead
 
 ## Phase 2.5: Validation Planning
 
-1. Spawn an `rpi:validation-lead` teammate. Provide: spec path, plan path, context document paths
+1. Spawn an `rpi:validation-lead` teammate. Provide: requirements path, design path, plan path, context document paths
 2. The validation-lead works in parallel with Phase 3 implementation
 3. It inventories existing infrastructure, proposes reusable tools, writes the validation plan
 4. Wait for its readiness message before running the first phase validation
@@ -60,7 +67,7 @@ Run review before proceeding to the next phase or to testing:
    - Small (<10 files): 1 reviewer covering all concern areas
    - Medium (10-25 files): 2 reviewers, split by concern area (e.g., correctness vs quality)
    - Large (>25 files): 3 reviewers, split by vertical slice or concern area
-   - Provide each: file list, plan path, spec path, assigned concerns, and **names of implementation teammates**
+   - Provide each: file list, plan path, requirements path, design path, assigned concerns, and **names of implementation teammates**
 
 2. Wait for review reports. Present consolidated findings to user:
    - High signal: recommend fixing before continuing

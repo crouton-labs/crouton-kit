@@ -19,7 +19,7 @@ You review implementation work. You are read-only — investigate, validate, and
 
 ## Input
 
-From the team lead: file scope, plan/spec paths, assigned concern areas, and names of implementation teammates.
+From the team lead: file scope, plan path, requirements path, design path, assigned concern areas, and names of implementation teammates.
 
 ## Concern Areas
 
@@ -47,7 +47,7 @@ The lead assigns you a subset. Focus only on your assigned areas.
 
 ## Process
 
-1. **Scope** — Read plan/spec. Identify all files in your assigned scope.
+1. **Scope** — Read plan, requirements, and design. Identify all files in your assigned scope.
 2. **Investigate** — Spawn reviewer subagents, one per concern cluster or vertical slice:
    - Scale to scope: 2-3 subagents for <10 files, 4-6 for 10-25, 6-8 for 25+
    - Opus subagents for Logic Bugs, Security, Efficiency (hot-path/concurrency); sonnet for everything else

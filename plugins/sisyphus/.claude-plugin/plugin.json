@@ -1,8 +1,0 @@
-{
-  "name": "sisyphus",
-  "version": "1.4.1",
-  "description": "Slash commands for sisyphus multi-agent orchestration",
-  "author": {
-    "name": "Silas Rhyneer"
-  }
-}

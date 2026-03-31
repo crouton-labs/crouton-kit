@@ -176,6 +176,50 @@ No matches → inline rendering.
 
 Both patterns beat "use the tool when appropriate" because they give the model concrete decision criteria.
 
+## Principles Over Procedures
+
+Agent prompts that prescribe exact steps create brittle agents. The model follows the letter of the instruction and loses the ability to adapt when context shifts. But vague aspirational guidance ("be thorough", "explore well") doesn't teach anything either. The sweet spot is: **state the reasoning, then ground it with an example.**
+
+The reasoning gives the model the *why* so it can generalize. The example shows what good judgment looks like concretely so it's not guessing.
+
+**Over-constrained:** "Always spawn exactly 3 explore agents before planning."
+**Too vague:** "Explore proportional to codebase complexity."
+**Sweet spot:** "Understand the scope of changes before committing to a plan — misunderstanding the codebase is the most expensive mistake. For example, if you're unsure how a subsystem works, spinning up 2–3 explore agents to map it out before writing a plan is usually worth the cost."
+
+The sweet spot version teaches the principle (understand before committing), explains why it matters (misunderstanding is expensive), and gives a concrete example of what that looks like in practice (2–3 explore agents). The model can then adapt — maybe it only needs one agent, maybe it needs five — but it knows *what good looks like*.
+
+### Signs of over-constraining
+
+- Fixed counts where the right number depends on the situation
+- Rigid sequences that assume a single execution path
+- The prompt keeps growing as you patch failure modes with more rules
+- The model follows instructions faithfully but produces worse outcomes than a looser prompt would
+
+### What to write instead
+
+Give the reasoning first, then an example when the application isn't obvious:
+
+```xml
+<!-- Over-constrained -->
+<planning>
+  Before implementing, create a plan with exactly 5 sections:
+  Overview, Changes, Tests, Risks, Rollback. Get user approval.
+  Then implement files in alphabetical order.
+</planning>
+
+<!-- Reasoning + example -->
+<planning>
+  Plan before building. A missed dependency or wrong assumption
+  caught during planning costs nothing — caught during implementation
+  it means rework. Surface your plan to the user before writing code.
+
+  For example, if the task touches multiple packages, your plan should
+  map out the dependency order so you're not refactoring mid-implementation.
+</planning>
+```
+
+The first version creates a rigid ritual. The second teaches *why planning matters* and shows what good planning looks like for a non-obvious case, while leaving the model free to adapt the format to the actual task.
+
 ## Scoping & Progressive Disclosure
 
 **Include:** Rules specific to your agent's domain, constraints on available tools, edge cases from testing, behavioral patterns users will encounter.
@@ -199,7 +243,7 @@ This is the pattern behind Claude Code skills — descriptions loaded upfront, f
 ## Common Mistakes
 
 - **Over-formatting** — heavily formatted system prompts produce heavily formatted responses
-- **Instruction-stuffing** — trying to anticipate every edge case; provide frameworks instead
+- **Instruction-stuffing** — trying to anticipate every edge case with exact steps; teach principles and let the model decide how to apply them
 - **Flat structure** — long prompts with no XML sections or headers; the model can't locate guidance
 - **XML-everything** — wrapping every paragraph; structural noise dilutes the signal
 - **Missing examples** — "be helpful but not too eager" means nothing without a demonstration

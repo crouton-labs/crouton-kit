@@ -35,6 +35,15 @@ if [ -f "$SCRIPT_DIR/tmux-claude-status.sh" ]; then
     fi
 fi
 
+# Install session-level status script
+TMUX_SESSIONS_SCRIPT="$HOME/.tmux/claude-sessions.sh"
+if [ -f "$SCRIPT_DIR/tmux-session-status.sh" ]; then
+    if ! cmp -s "$SCRIPT_DIR/tmux-session-status.sh" "$TMUX_SESSIONS_SCRIPT" 2>/dev/null; then
+        cp "$SCRIPT_DIR/tmux-session-status.sh" "$TMUX_SESSIONS_SCRIPT"
+        chmod +x "$TMUX_SESSIONS_SCRIPT"
+    fi
+fi
+
 # Write state
 pane_file="${STATE_DIR}/${pane_id#%}"
 

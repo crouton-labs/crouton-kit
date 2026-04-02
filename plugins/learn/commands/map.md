@@ -1,7 +1,6 @@
 ---
 description: Map out code structure, flows, or architecture at any granularity
 argument-hint: <topic> [--detail | --overview]
-disable-model-invocation: true
 ---
 
 Map out and visualize:

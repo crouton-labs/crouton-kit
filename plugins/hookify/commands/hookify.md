@@ -1,259 +1,91 @@
 ---
 description: Create hooks to prevent unwanted behaviors from conversation analysis or explicit instructions
 argument-hint: Optional specific behavior to address
-allowed-tools: ["Read", "Write", "AskUserQuestion", "Task", "Grep", "TodoWrite", "Skill"]
+allowed-tools: ["Read", "Write", "AskUserQuestion", "TaskCreate", "Grep", "Glob", "Skill"]
 disable-model-invocation: true
 ---
 
-# Hookify - Create Hooks from Unwanted Behaviors
+You are a hookify rule author — an expert at translating behavioral guardrails into precise, minimal rule files.
 
-cwd: !`cwd`
+Project directory: !`pwd`
 
-**FIRST: Load the hookify:writing-rules skill** using the Skill tool to understand rule file format and syntax.
+**Load the hookify:writing-rules skill first** using the Skill tool. It is the authoritative reference for rule syntax, event types, patterns, and file format. Do not duplicate that information here.
 
-Create hook rules to prevent problematic behaviors by analyzing the conversation or from explicit user instructions.
+## Constraints
 
-## Your Task
+- Create rule files in `{project directory}/.claude/`, never in the plugin directory.
+- Create `.claude/` with `mkdir -p` if it doesn't exist.
+- Use absolute paths when writing files.
+- Verify each created file exists after writing.
+- Rules are active immediately — no restart needed.
 
-You will help the user create hookify rules to prevent unwanted behaviors. Follow these steps:
+## Flow
 
-### Step 1: Gather Behavior Information
+### 1. Gather Intent
 
-**If $ARGUMENTS is provided:**
-- User has given specific instructions: `$ARGUMENTS`
-- Still analyze recent conversation (last 10-15 user messages) for additional context
-- Look for examples of the behavior happening
+**If `$ARGUMENTS` is provided:**
+- The user has stated what they want: `$ARGUMENTS`
+- Scan the recent conversation for examples of the behavior to refine patterns.
 
-**If $ARGUMENTS is empty:**
-- Launch the conversation-analyzer agent to find problematic behaviors
-- Agent will scan user prompts for frustration signals
-- Agent will return structured findings
+**If `$ARGUMENTS` is empty:**
+- Scan the last 10-15 user messages for:
+  - Explicit avoidance requests ("don't do X", "stop doing Y")
+  - Corrections or reversions (user undoing Claude's actions)
+  - Frustrated reactions ("why did you do X?")
+  - Repeated issues
+- Extract: which tool, what pattern, why it matters.
 
-**To analyze conversation:**
-Use the Task tool to launch conversation-analyzer agent:
-```
-{
-  "subagent_type": "general-purpose",
-  "description": "Analyze conversation for unwanted behaviors",
-  "prompt": "You are analyzing a Claude Code conversation to find behaviors the user wants to prevent.
+### 2. Confirm with User
 
-Read user messages in the current conversation and identify:
-1. Explicit requests to avoid something (\"don't do X\", \"stop doing Y\")
-2. Corrections or reversions (user fixing Claude's actions)
-3. Frustrated reactions (\"why did you do X?\", \"I didn't ask for that\")
-4. Repeated issues (same problem multiple times)
+Use AskUserQuestion for each decision point. Ask as many clarifying questions as needed to get the rule right.
 
-For each issue found, extract:
-- What tool was used (Bash, Edit, Write, etc.)
-- Specific pattern or command
-- Why it was problematic
-- User's stated reason
-
-Return findings as a structured list with:
-- category: Type of issue
-- tool: Which tool was involved
-- pattern: Regex or literal pattern to match
-- context: What happened
-- severity: high/medium/low
-
-Focus on the most recent issues (last 20-30 messages). Don't go back further unless explicitly asked."
-}
-```
-
-### Step 2: Present Findings to User
-
-After gathering behaviors (from arguments or agent), present to user using AskUserQuestion:
-
-**Question 1: Which behaviors to hookify?**
-- Header: "Create Rules"
+**Question 1 — Which behaviors to create rules for?**
+- header: "Create Rules"
 - multiSelect: true
-- Options: List each detected behavior (max 4)
-  - Label: Short description (e.g., "Block rm -rf")
-  - Description: Why it's problematic
+- Options: each detected behavior (max 6)
+  - Label: short positive description (e.g., "Guard against rm -rf", "Require tests before stop")
+  - Description: what the rule protects
 
-**Question 2: For each selected behavior, ask about action:**
-- "Should this block the operation or just warn?"
-- Options:
-  - "Just warn" (action: warn - shows message but allows)
-  - "Block operation" (action: block - prevents execution)
+**Question 2 — For each selected behavior, severity:**
+- "Should this block the operation or show a warning?"
+- Options: "Warn (allow but notify)" / "Block (prevent entirely)"
 
-**Question 3: Ask for example patterns:**
-- "What patterns should trigger this rule?"
-- Show detected patterns
-- Allow user to refine or add more
+**Question 3 — Pattern refinement:**
+- Show the detected or proposed regex patterns
+- Ask user to confirm, refine, or add more
+- Show what would and wouldn't match
 
-### Step 3: Generate Rule Files
+Ask follow-up questions if anything is ambiguous — event type, scope (global vs project), conditions, message wording. Get it right rather than guessing.
 
-For each confirmed behavior, create a `.claude/hookify.{rule-name}.local.md` file:
+### 3. Create Rule Files
 
-**Rule naming convention:**
-- Use kebab-case
-- Be descriptive: `block-dangerous-rm`, `warn-console-log`, `require-tests-before-stop`
-- Start with action verb: block, warn, prevent, require
+For each confirmed rule:
+1. Write `.claude/hookify.{name}.local.md` using the format from the writing-rules skill
+2. Verify the file exists
+3. Summarize what was created and what triggers it
 
-**File format:**
+<example>
+User: "/hookify Guard against rm -rf"
+
+Response flow:
+1. Ask: "Should this block rm -rf or just warn you?"
+2. User: "Just warn"
+3. Create `.claude/hookify.warn-dangerous-rm.local.md`:
 ```markdown
 ---
-name: {rule-name}
+name: warn-dangerous-rm
 enabled: true
-event: {bash|file|stop|prompt|teammate_idle|task_completed|all}
-pattern: {regex pattern}
-action: {warn|block}
+event: bash
+pattern: rm\s+-rf
+action: warn
 ---
 
-{Message to show Claude when rule triggers}
+**Destructive rm command detected**
+
+You requested a warning before rm -rf runs.
+Verify the target path is correct before proceeding.
 ```
+4. Confirm: "Created `.claude/hookify.warn-dangerous-rm.local.md` — active now."
+</example>
 
-**Action values:**
-- `warn`: Show message but allow operation (default)
-- `block`: Prevent operation or stop session
-
-**For more complex rules (multiple conditions):**
-```markdown
----
-name: {rule-name}
-enabled: true
-event: file
-conditions:
-  - field: file_path
-    operator: regex_match
-    pattern: \.env$
-  - field: new_text
-    operator: contains
-    pattern: API_KEY
----
-
-{Warning message}
-```
-
-### Step 4: Create Files and Confirm
-
-**IMPORTANT**: Rule files must be created in the current working directory's `.claude/` folder, NOT the plugin directory.
-
-Use the current working directory (where Claude Code was started) as the base path.
-
-1. Check if `.claude/` directory exists in current working directory
-   - If not, create it first with: `mkdir -p .claude`
-
-2. Use Write tool to create each `.claude/hookify.{name}.local.md` file
-   - Use relative path from current working directory: `.claude/hookify.{name}.local.md`
-   - The path should resolve to the project's .claude directory, not the plugin's
-
-3. Show user what was created:
-   ```
-   Created 3 hookify rules:
-   - .claude/hookify.dangerous-rm.local.md
-   - .claude/hookify.console-log.local.md
-   - .claude/hookify.sensitive-files.local.md
-
-   These rules will trigger on:
-   - dangerous-rm: Bash commands matching "rm -rf"
-   - console-log: Edits adding console.log statements
-   - sensitive-files: Edits to .env or credentials files
-   ```
-
-4. Verify files were created in the correct location by listing them
-
-5. Inform user: **"Rules are active immediately - no restart needed!"**
-
-   The hookify hooks are already loaded and will read your new rules on the next tool use.
-
-## Event Types Reference
-
-- **bash**: Matches Bash tool commands
-- **file**: Matches Edit, Write, MultiEdit tools
-- **stop**: Matches when agent wants to stop (use for completion checks)
-- **prompt**: Matches when user submits prompts
-- **teammate_idle**: Matches when a teammate is about to go idle (use for enforcing work completion)
-- **task_completed**: Matches when a task is marked complete (use for verification gates)
-- **all**: Matches all events
-
-## Pattern Writing Tips
-
-**Bash patterns:**
-- Match dangerous commands: `rm\s+-rf|chmod\s+777|dd\s+if=`
-- Match specific tools: `npm\s+install\s+|pip\s+install`
-
-**File patterns:**
-- Match code patterns: `console\.log\(|eval\(|innerHTML\s*=`
-- Match file paths: `\.env$|\.git/|node_modules/`
-
-**Stop patterns:**
-- Check for missing steps: (check transcript or completion criteria)
-
-## Dynamic Command Interpolation
-
-Messages can include shell commands that execute and substitute output. Use `!​`command`` syntax:
-
-```markdown
----
-name: show-git-status
-enabled: true
-event: prompt
-pattern: \bgit\b|\bcommit\b
----
-
-**Current Git Status:**
-!​`git status --short`
-```
-
-The `!​`command`` is replaced with actual command output. Useful for:
-- `!​`linear issue list`` - Show Linear tickets
-- `!​`git status --short`` - Show git status
-- `!​`bd list --status=open`` - Show open beads issues
-
-## Example Workflow
-
-**User says**: "/hookify Don't use rm -rf without asking me first"
-
-**Your response**:
-1. Analyze: User wants to prevent rm -rf commands
-2. Ask: "Should I block this command or just warn you?"
-3. User selects: "Just warn"
-4. Create `.claude/hookify.dangerous-rm.local.md`:
-   ```markdown
-   ---
-   name: warn-dangerous-rm
-   enabled: true
-   event: bash
-   pattern: rm\s+-rf
-   ---
-
-   ⚠️ **Dangerous rm command detected**
-
-   You requested to be warned before using rm -rf.
-   Please verify the path is correct.
-   ```
-5. Confirm: "Created hookify rule. It's active immediately - try triggering it!"
-
-## Important Notes
-
-- **No restart needed**: Rules take effect immediately on the next tool use
-- **File locations**: Rules can be placed in two locations:
-  - `~/.claude/hookify.*.local.md` - **Global rules** (apply to all projects)
-  - `.claude/hookify.*.local.md` - **Project rules** (apply to current project only)
-- **Regex syntax**: Use Python regex syntax (raw strings, no need to escape in YAML)
-- **Action types**: Rules can `warn` (default) or `block` operations
-- **Testing**: Test rules immediately after creating them
-
-## Troubleshooting
-
-**If rule file creation fails:**
-1. Check current working directory with pwd
-2. Ensure `.claude/` directory exists (create with mkdir if needed)
-3. Use absolute path if needed: `{cwd}/.claude/hookify.{name}.local.md`
-4. Verify file was created with Glob or ls
-
-**If rule doesn't trigger after creation:**
-1. Verify file is in project `.claude/` not plugin `.claude/`
-2. Check file with Read tool to ensure pattern is correct
-3. Test pattern with: `python3 -c "import re; print(re.search(r'pattern', 'test text'))"`
-4. Verify `enabled: true` in frontmatter
-5. Remember: Rules work immediately, no restart needed
-
-**If blocking seems too strict:**
-1. Change `action: block` to `action: warn` in the rule file
-2. Or adjust the pattern to be more specific
-3. Changes take effect on next tool use
-
-Use TodoWrite to track your progress through the steps.
+Use TaskCreate to track progress through the steps.

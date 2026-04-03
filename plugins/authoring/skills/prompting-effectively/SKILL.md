@@ -13,12 +13,17 @@ For detailed patterns and examples, see [reference.md](reference.md).
 
 The most important architectural decision: what goes where.
 
-**Behavior zone** (system prompt, commands, agents, modes):
-- Personality, tone, communication style
+**Behavior zone** (system prompt, agents, modes):
+- Identity, personality, tone
 - Constraints and hard rules
 - Tool usage policies
 - Decision frameworks ("when X, do Y")
 - Formatting preferences
+
+**Task zone** (commands, skills, task prompts):
+- Temporary role shifts and focus areas
+- Step-by-step procedures or constraints for the task
+- Context the agent needs to do this specific thing
 
 **Knowledge zone** (skills, documents, user context, CLAUDE.md):
 - Reference material and domain knowledge
@@ -26,7 +31,7 @@ The most important architectural decision: what goes where.
 - Project information
 - Data that changes between sessions
 
-System prompt content gets treated as foundational identity. User context gets treated as reference material. Mixing them up creates agents that treat their own rules as optional suggestions, or treat reference documents as core identity.
+System prompt content gets treated as foundational identity. Task-zone content layers on top — it *redirects* the agent without replacing who it is. Knowledge gets treated as reference material. Mixing these up creates agents that treat their own rules as optional suggestions, or user-turn prompts that fight the system prompt for control of identity.
 
 ## XML as Cognitive Fencing
 
@@ -70,19 +75,29 @@ Match formatting to what you're communicating:
 
 ## Tone Registers
 
-The voice you use affects how the model interprets instructions.
+The voice you use affects how the model interprets instructions — and the right voice depends on *where the prompt lives*.
 
-**Third person → Identity:**
+**Third person → Identity (system prompts only):**
 > "Claude cares about people's wellbeing."
 > "The agent avoids over-formatting responses."
 
-Establishes personality traits. The model internalizes these as "who I am."
+Establishes personality traits. The model internalizes these as "who I am." This framing belongs in system prompts, agents, and modes — not in commands or skills.
+
+**"You are X" → Identity declaration (system prompts only):**
+> "You are a senior security auditor who reviews code for vulnerabilities."
+
+Defines the agent's core role. In a system prompt, this is foundational. In a user-turn prompt (command, skill, task), it conflicts with the identity already established — use "Act as X for this task" instead.
+
+**"Act as X" → Temporary role (commands, skills, task prompts):**
+> "Act as a security auditor for this review. Focus on auth flows and input validation."
+
+Layers a role on top of the existing identity without overriding it. The agent applies this lens for the current task, then returns to its base behavior.
 
 **Second person → Operations:**
 > "When you encounter X, stop immediately."
 > "You should use the minimum number of tools needed."
 
-Direct instruction for procedures and workflows.
+Direct instruction for procedures and workflows. Works in both zones.
 
 **Imperative → Hard rules:**
 > "NEVER reproduce song lyrics."
@@ -176,49 +191,60 @@ No matches → inline rendering.
 
 Both patterns beat "use the tool when appropriate" because they give the model concrete decision criteria.
 
-## Principles Over Procedures
+## Procedures vs Constraints
 
-Agent prompts that prescribe exact steps create brittle agents. The model follows the letter of the instruction and loses the ability to adapt when context shifts. But vague aspirational guidance ("be thorough", "explore well") doesn't teach anything either. The sweet spot is: **state the reasoning, then ground it with an example.**
+Choose the right structure for the guidance you're giving. Neither is inherently better.
 
-The reasoning gives the model the *why* so it can generalize. The example shows what good judgment looks like concretely so it's not guessing.
+**Use procedures when** the order genuinely matters — steps that must happen in sequence, every time, or the outcome breaks. A deployment checklist, a multi-stage data pipeline, a protocol with dependencies between steps. If step 3 can't happen before step 2, that's a procedure.
+
+```
+1. Run the test suite
+2. If tests pass, build the artifact
+3. Deploy to staging
+4. Run smoke tests against staging
+5. If smoke tests pass, promote to production
+```
+
+This is correct as a procedure because each step depends on the previous one. Rewriting it as constraints ("ensure tests pass", "verify staging health") loses the ordering that makes it work.
+
+**Use constraints when** the guidance is about *what matters*, not *what order to do it in*. Behavioral rules, quality standards, and goals where the agent should decide how to get there.
+
+```
+Plan before building. A missed dependency or wrong assumption
+caught during planning costs nothing — caught during implementation
+it means rework. Surface your plan to the user before writing code.
+```
+
+This is correct as a constraint because the agent should adapt *how* it plans to the specific task.
+
+**The failure modes are opposite:**
+- Procedures where constraints belong → brittle agents that follow the letter and miss the point
+- Constraints where procedures belong → agents that skip critical steps or reorder dependencies
+
+### When you're unsure
+
+If it's not clear from the prompt whether something should be procedural or flexible, ask. "Should these steps happen in this exact order every time, or is the order flexible?" is a better question than guessing wrong.
+
+### The middle ground: principles + examples
+
+When the guidance is flexible but the application isn't obvious, state the reasoning and ground it with an example:
 
 **Over-constrained:** "Always spawn exactly 3 explore agents before planning."
 **Too vague:** "Explore proportional to codebase complexity."
 **Sweet spot:** "Understand the scope of changes before committing to a plan — misunderstanding the codebase is the most expensive mistake. For example, if you're unsure how a subsystem works, spinning up 2–3 explore agents to map it out before writing a plan is usually worth the cost."
 
-The sweet spot version teaches the principle (understand before committing), explains why it matters (misunderstanding is expensive), and gives a concrete example of what that looks like in practice (2–3 explore agents). The model can then adapt — maybe it only needs one agent, maybe it needs five — but it knows *what good looks like*.
+The sweet spot teaches the principle, explains why it matters, and shows what good judgment looks like — while leaving the agent free to adapt.
 
-### Signs of over-constraining
+### Signs of wrong structure
 
+**Procedure masquerading as constraints:**
+- Steps that keep getting reordered or skipped, causing failures
+- You keep adding "make sure X happened before Y" patches
+
+**Constraints masquerading as procedure:**
 - Fixed counts where the right number depends on the situation
-- Rigid sequences that assume a single execution path
 - The prompt keeps growing as you patch failure modes with more rules
 - The model follows instructions faithfully but produces worse outcomes than a looser prompt would
-
-### What to write instead
-
-Give the reasoning first, then an example when the application isn't obvious:
-
-```xml
-<!-- Over-constrained -->
-<planning>
-  Before implementing, create a plan with exactly 5 sections:
-  Overview, Changes, Tests, Risks, Rollback. Get user approval.
-  Then implement files in alphabetical order.
-</planning>
-
-<!-- Reasoning + example -->
-<planning>
-  Plan before building. A missed dependency or wrong assumption
-  caught during planning costs nothing — caught during implementation
-  it means rework. Surface your plan to the user before writing code.
-
-  For example, if the task touches multiple packages, your plan should
-  map out the dependency order so you're not refactoring mid-implementation.
-</planning>
-```
-
-The first version creates a rigid ritual. The second teaches *why planning matters* and shows what good planning looks like for a non-obvious case, while leaving the model free to adapt the format to the actual task.
 
 ## Scoping & Progressive Disclosure
 
@@ -253,11 +279,11 @@ This is the pattern behind Claude Code skills — descriptions loaded upfront, f
 
 ## Applying to Claude Code Components
 
-| Component | Zone | Key consideration |
-|-----------|------|-------------------|
-| Commands | Behavior | Constraints > procedures. Minimal tokens. |
-| Agents | Behavior | Identity via 3rd person, operations via 2nd person. |
-| Modes | Behavior | `append` keeps standard identity; `replace` for full custom persona. |
-| Skills | Knowledge | Progressive disclosure. Overview in SKILL.md, depth in reference files. |
-| CLAUDE.md | Knowledge | Guardrails and pointers. Constraints Claude would get wrong without. |
-| Rules | Behavior | Declarative constraints scoped by file pattern. |
+| Component | Zone | Role framing | Key consideration |
+|-----------|------|-------------|-------------------|
+| Agents | Behavior | "You are X" — defines identity | 3rd person for traits, 2nd person for operations. |
+| Modes | Behavior | "You are X" — defines identity | `append` keeps standard identity; `replace` for full custom persona. |
+| Commands | Task | "Act as X" — temporary lens | Constraints or procedures depending on the task. Minimal tokens. |
+| Skills | Knowledge | No role — reference material | Progressive disclosure. Overview in SKILL.md, depth in reference files. |
+| CLAUDE.md | Knowledge | No role — project context | Guardrails and pointers. Constraints Claude would get wrong without. |
+| Rules | Behavior | No role — constraints only | Declarative constraints scoped by file pattern. |

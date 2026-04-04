@@ -141,6 +141,57 @@ Organized by interaction phase (CHI 2019):
 
 ---
 
+## Review & Approval Interface Design
+
+The "Review & Approve" pattern is common but under-specified. These patterns apply to any interface where a human reviews AI-generated structured content.
+
+### Structured Content as Visual Components
+
+When AI produces structured output (condition/behavior pairs, before/after comparisons, input/output mappings), render each part as a **visually distinct component** — not styled text in a paragraph.
+
+- Use background tints, borders, or cards to create visual containers for each structural element
+- Label components with their role — don't rely on position alone
+- Color is a **categorization mechanism** (scan structure before reading content), not decoration
+
+**Anti-pattern:** Rendering structured data as a formatted paragraph. Users can't distinguish parts at a glance.
+
+### AI Reasoning as Callouts
+
+When the AI flags something for human attention, render it as a **visually distinct callout** — not inline with the content being reviewed.
+
+- Visually separate from the artifact (icon + distinct color)
+- Read-only — the user shouldn't edit the AI's reasoning
+- Positioned after content but before action controls: read → consider flag → decide
+
+### Pre-Filled Options with Reasoning
+
+When the AI asks a question, offer **prefilled options with reasoning**, plus a custom escape hatch.
+
+- Each option: a **title** (the choice) + a **description** (why it makes sense)
+- Always include a "custom answer" option for unanticipated responses
+- Show reasoning per-option, not in a separate section — users evaluate choice and rationale together
+- Frame tradeoffs explicitly: "More flexible but complex" vs. "Simpler but rigid"
+
+**Anti-pattern:** Open-ended questions with no guidance. The user generates the answer space from scratch.
+
+### Review State Visibility
+
+When users revisit items, show what they previously decided — clearly, without obscuring content.
+
+- Display previous action and any comments inline
+- Pre-fill inputs with existing content when editing
+- Resolved items should be **skipped**, not shown as disabled — reduce the set to what needs attention
+- Aggregate progress visible at all times
+
+### Action Proximity
+
+Place action controls **immediately after the content being reviewed**, not in a distant toolbar.
+
+- The happy-path action (approve, accept) should be the lowest-friction interaction — one keypress or click
+- Adding context (comment, annotation) should not require navigating away from the content
+
+---
+
 ## Key Design Tensions
 
 | Tension | Resolution Approach |
@@ -183,6 +234,14 @@ Organized by interaction phase (CHI 2019):
 - [ ] Explicit about uncertainty — "I don't know" is acceptable
 - [ ] Consistent behavior enabling accurate mental models
 - [ ] Audit trail for AI decisions and actions
+
+### Review & Approval UX
+- [ ] Structured content rendered as distinct visual components, not formatted paragraphs
+- [ ] AI reasoning visually separated from the artifact being reviewed
+- [ ] Questions offer prefilled options with reasoning, plus a custom escape hatch
+- [ ] Previous actions visible when revisiting items; inputs pre-filled for editing
+- [ ] Resolved items skipped — review set shows only what needs attention
+- [ ] Action controls adjacent to content; happy path is lowest-friction
 
 ---
 

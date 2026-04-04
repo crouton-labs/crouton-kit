@@ -218,6 +218,82 @@ TUIs (terminal user interfaces) fill the terminal viewport and use keyboard even
 
 Source: [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea), [Inngest — Interactive CLIs with Bubbletea](https://www.inngest.com/blog/interactive-clis-with-bubbletea), [dev.to — Intro to Bubble Tea in Go](https://dev.to/andyhaskell/intro-to-bubble-tea-in-go-21lg)
 
+### Wizard / Phase-Based TUIs
+
+Dashboard TUIs show everything at once. Wizard TUIs guide users through a linear sequence — one decision at a time. These are distinct interaction models with different design constraints.
+
+**When to use a wizard:**
+- Review/approval workflows where items need individual attention
+- Setup flows with dependent steps
+- Any task where showing everything at once causes information overload
+
+**Phase structure:**
+- Each phase has a persistent **context header** and a scrollable **content area**
+- Progress indicators (dots, bars, counters) must be visible at all times
+- Forward/backward navigation should be symmetric and work across phase boundaries — never a dead end
+
+### Content Width & Centering
+
+**Never stretch content to fill a wide terminal.** Readability degrades past ~80 columns.
+
+- Set a max content width (60–80 cols) and center it horizontally
+- Wide terminals get generous margins, not wider lines
+- Pre-formatted content (diagrams, code) should render at natural width, clipped if necessary — word-wrapping breaks alignment
+
+### ANSI Styling Hygiene
+
+**Background colors bleed to the right edge of the terminal** unless explicitly reset before the line ends. This is the most common visual bug in custom TUI rendering.
+
+- Every line that sets a background color must reset (`\x1b[0m`) before end-of-line
+- Never re-enable a background after a reset on the same line without a second reset
+- Test with a terminal wider than your content — bleed is invisible when content fills the full width
+- When using bg tints for visual containers, pad content to a fixed width and reset at the boundary
+
+### Selection Highlighting
+
+For lists, **color change + indicator beats background highlight.**
+
+- Background highlight creates visual noise and risks bg-bleed
+- Prefer: arrow indicator (`▸`) + color change on the selected item's title
+- Description text stays dim regardless of selection state — only the title changes
+- Number keys for direct jump — don't force sequential navigation for short lists
+
+### Inline Text Input
+
+TUIs need text input. Two approaches with different tradeoffs:
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **External editor / popup** | Full editing, handles long text | Context switch — user loses sight of what they're responding to |
+| **Inline input** | User sees context while typing, no dependency on external tools | Limited editing capabilities |
+
+**Prefer inline** for short-to-medium text. Reserve external editors for long-form content.
+
+- Word-wrap the input at content width — don't force horizontal scrolling
+- Input area grows vertically; content above shrinks to accommodate
+- Pre-fill with existing content when editing, not just creating
+- Always show submit/cancel bindings
+
+### Alt-Screen + Stdout Output
+
+A TUI command can be both interactive *and* produce structured output:
+
+1. Enter alternate screen buffer for the interactive TUI
+2. User makes decisions
+3. On exit: restore main screen, then print structured result to stdout
+
+The TUI disappears and the output appears as normal command output. This lets scripts, agents, and pipelines capture results from an interactive tool.
+
+### Progressive Disclosure in TUI
+
+Show less, not more. One decision at a time.
+
+- Present items individually, not as a scrollable list — focus on one decision before the next
+- Expandable sections for secondary detail — collapsed by default
+- Orient with context (overview, diagrams) before asking for decisions
+- Skip items that don't need attention — count them in progress, don't show them
+- Final screen shows aggregate stats, not a re-listing of every item
+
 ---
 
 ## Scripting & Composability
@@ -324,11 +400,16 @@ Source: [clig.dev](https://clig.dev/), [12 Factor CLI Apps](https://medium.com/@
 
 ### TUI (if applicable)
 - [ ] Every action reachable by keyboard; mouse is additive, not required
-- [ ] `q` / `Ctrl-C` / `Esc` always exits or goes back
+- [ ] `q` / `Ctrl-C` / `Esc` always exits or goes back — never a dead end
 - [ ] Key bindings visible in footer or `?` help overlay
 - [ ] Layout adapts to terminal dimensions on resize
+- [ ] Content width capped at 60–80 cols; centered on wide terminals
 - [ ] Color has fallback; tested with `NO_COLOR=1` and `TERM=dumb`
 - [ ] Alternate screen used; terminal fully restored on exit
+- [ ] Every background color sequence has a matching reset before end-of-line
+- [ ] Selection uses color change + indicator, not background highlight
+- [ ] Inline text input wraps at content width; pre-fills when editing
+- [ ] If the TUI produces a result, it's printed to stdout after alt-screen exit
 
 ### Scripting & Composability
 - [ ] Reads from stdin when no file argument given

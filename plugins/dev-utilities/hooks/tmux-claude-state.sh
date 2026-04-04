@@ -24,26 +24,6 @@ if [ -z "$pane_id" ]; then
     exit 0  # not inside tmux, nothing to do
 fi
 
-# Ensure the status helper script is installed (lightweight, no config changes)
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TMUX_STATUS_SCRIPT="$HOME/.tmux/claude-status.sh"
-if [ -f "$SCRIPT_DIR/tmux-claude-status.sh" ]; then
-    mkdir -p "$HOME/.tmux"
-    if ! cmp -s "$SCRIPT_DIR/tmux-claude-status.sh" "$TMUX_STATUS_SCRIPT" 2>/dev/null; then
-        cp "$SCRIPT_DIR/tmux-claude-status.sh" "$TMUX_STATUS_SCRIPT"
-        chmod +x "$TMUX_STATUS_SCRIPT"
-    fi
-fi
-
-# Install session-level status script
-TMUX_SESSIONS_SCRIPT="$HOME/.tmux/claude-sessions.sh"
-if [ -f "$SCRIPT_DIR/tmux-session-status.sh" ]; then
-    if ! cmp -s "$SCRIPT_DIR/tmux-session-status.sh" "$TMUX_SESSIONS_SCRIPT" 2>/dev/null; then
-        cp "$SCRIPT_DIR/tmux-session-status.sh" "$TMUX_SESSIONS_SCRIPT"
-        chmod +x "$TMUX_SESSIONS_SCRIPT"
-    fi
-fi
-
 # Write state
 pane_file="${STATE_DIR}/${pane_id#%}"
 

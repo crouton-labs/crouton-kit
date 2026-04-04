@@ -1,15 +1,5 @@
 # Hooks Directory
 
-Claude Code lifecycle hooks that execute at specific session and tool events.
-
-## Hook Types (hooks.json)
-
-- **SessionStart** - When session starts (with optional `matcher` for `clear` or unconditional)
-- **PreToolUse** - Before Bash tool execution (with tool matchers)
-- **PostToolUse** - After Bash tool execution (with tool matchers)
-- **SessionEnd** - When session ends
-- **Notification** - Fires on events (e.g., success sounds)
-
 ## Active Hook Implementations
 
 ### SessionStart/SessionEnd
@@ -38,15 +28,13 @@ Hook event → state mapping:
 
 **Color semantics** (non-obvious): `stopped` = **green** (Claude awaiting user input), `processing` = yellow, `idle` = gray. "Stopped" is the highest-priority state in the session aggregator.
 
-On each run, the hook auto-copies `tmux-claude-status.sh` → `~/.tmux/claude-status.sh` and `tmux-session-status.sh` → `~/.tmux/claude-sessions.sh`, using `cmp -s` to skip unchanged files.
+**Silent failure mode**: the script parses `hook_event_name` from stdin JSON via `python3 -c ... 2>/dev/null`. If python3 is absent or the parse fails, `event` is empty and all `case` branches are skipped — no error, no state written. A crashed session also skips `SessionEnd`, leaving a stale state file; it clears only when the next session fires `SessionStart` on that pane.
 
 `tmux.conf` carries the tag `# managed:claude-tmux-state` so the installer can locate and replace the block. `status-interval 2` — tmux polls the status scripts every 2 seconds.
 
-**Activation**: run `/tmux-integrate` to install the `tmux.conf` fragment into the active tmux config. Without this step, the state files are written but nothing displays them.
+**Activation**: run `/tmux-integrate` to install the helper scripts (`~/.tmux/claude-status.sh`, `~/.tmux/claude-sessions.sh`) and the `tmux.conf` fragment into the active tmux config. Without this step, the state files are written but nothing displays them.
 
-## Implementation Notes
+## Hook Configuration Notes
 
-- Each hook is a **separate executable** (Python, shell, or JavaScript)
-- Hooks are **synchronous** - execution blocks the operation
 - Use `${CLAUDE_PLUGIN_ROOT}` to reference hook paths in hooks.json
-- Matchers: `matcher: "Bash"` targets specific tools; `matcher: "clear"` targets SessionStart source type
+- `matcher: "clear"` targets SessionStart source type (not a tool name); see `hook-development.md` rules for the full event/matcher reference

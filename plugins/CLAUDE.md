@@ -95,28 +95,14 @@ Pushing to `main` triggers CI that automatically bumps versions in both `plugin.
 
 CI determines bump type from conventional commit prefix: `feat` → minor, `fix`/`refactor`/etc → patch, `!`/`BREAKING CHANGE` → major.
 
-## Propagating Changes to Local Claude Code
+## Propagating Changes
 
-Plugin cache is versioned by `plugin.json` version (e.g. `~/.claude/plugins/cache/crouton-kit/web/1.6.0/`). Changes only take effect when Claude Code populates a new cache entry.
-
-**After pushing changes:**
-
-```bash
-# 1. Wait for CI version bump commit (or check GitHub Actions)
-# 2. Pull the bump into the local marketplace clone
-cd ~/.claude/plugins/marketplaces/crouton-kit && git pull
-
-# 3. Restart Claude Code session (required for skill changes)
-#    /reload-plugins works for commands/agents/hooks but NOT skills (#35641)
-```
-
-**Why a session restart?** `/reload-plugins` reads from the existing cache and doesn't re-scan the marketplace clone for new versions. Skills specifically don't reload even with `/reload-plugins` due to a known bug.
+Plugin cache is versioned by `plugin.json` version. After pushing: wait for CI version bump, then `/reload-plugins`. It fetches the marketplace repo, populates a new cache entry, and loads it. No manual `git pull` or session restart needed.
 
 **For rapid local iteration** (bypasses cache entirely):
 ```bash
 claude --plugin-dir ./plugins/web --plugin-dir ./plugins/devcore
 ```
-With `--plugin-dir`, `/reload-plugins` reads directly from source. Still requires restart for skill changes.
 
 ## Known Upstream Issues
 

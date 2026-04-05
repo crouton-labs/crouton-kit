@@ -231,6 +231,7 @@ Dashboard TUIs show everything at once. Wizard TUIs guide users through a linear
 - Each phase has a persistent **context header** and a scrollable **content area**
 - Progress indicators (dots, bars, counters) must be visible at all times
 - Forward/backward navigation should be symmetric and work across phase boundaries — never a dead end
+- **Consistent interaction model across phases** — if one phase uses j/k for option selection, every phase with options must too. Mixed interaction models (j/k in questions but number-keys-only in reviews) create confusion about what the keys do on any given screen
 
 ### Content Width & Centering
 
@@ -256,7 +257,9 @@ For lists, **color change + indicator beats background highlight.**
 - Background highlight creates visual noise and risks bg-bleed
 - Prefer: arrow indicator (`▸`) + color change on the selected item's title
 - Description text stays dim regardless of selection state — only the title changes
-- Number keys for direct jump — don't force sequential navigation for short lists
+- Number/letter keys for direct jump — keep as accelerators alongside sequential navigation
+- **Preselect the most common/recommended action** — Enter without navigating should do the right thing
+- **Action bars are selection lists** — when a phase presents 2-4 actions (approve, comment, skip), render them as a vertical navigable list with j/k + Enter, not just static keybind labels. Keep the keybinds as shortcuts that fire immediately.
 
 ### Inline Text Input
 

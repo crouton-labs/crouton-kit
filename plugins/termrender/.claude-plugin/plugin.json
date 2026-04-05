@@ -1,0 +1,8 @@
+{
+  "name": "termrender",
+  "version": "1.0.0",
+  "description": "Rich terminal rendering of directive-flavored markdown via the termrender CLI",
+  "author": {
+    "name": "Silas Rhyneer"
+  }
+}

@@ -181,6 +181,19 @@
         "posting",
         "growth"
       ]
+    },
+    {
+      "name": "termrender",
+      "source": "./plugins/termrender",
+      "description": "Rich terminal rendering of directive-flavored markdown with tmux side pane support",
+      "version": "1.0.0",
+      "keywords": [
+        "terminal",
+        "rendering",
+        "markdown",
+        "tmux",
+        "diagrams"
+      ]
     }
   ]
 }

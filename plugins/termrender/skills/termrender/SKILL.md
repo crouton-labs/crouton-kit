@@ -91,6 +91,48 @@ graph TD
 ```
 ````
 
+## Mermaid Best Practices
+
+Mermaid diagrams render as ASCII box art — every node becomes a bordered rectangle. Diagrams that look clean in a browser can be unreadable in a terminal. Follow these rules:
+
+**Fewer nodes, more text.** Each node should carry enough context to be useful on its own. Don't split a concept across multiple tiny nodes — combine them into one descriptive node. 3–6 nodes is ideal; 8+ usually produces output wider than the terminal.
+
+**Keep labels short but descriptive.** Node labels render inside bordered boxes. Long labels make wide boxes that eat horizontal space. Aim for 2–5 words per node. Use `<br/>` for multi-line labels when a node needs more context.
+
+**Prefer `graph TD` over `graph LR`.** Top-down layouts grow vertically (cheap in a terminal) instead of horizontally (expensive). LR graphs with 4+ nodes in a chain will overflow most terminals.
+
+**Limit branching.** A node with 4+ children at the same depth creates 4+ side-by-side boxes. If a node has many children, consider grouping related children into a single summary node, or splitting into separate diagrams.
+
+**Use panels for detail, mermaid for flow.** Don't cram implementation details into node labels. Show the high-level flow in mermaid, then use `:::panel` or `:::columns` below to expand on each step.
+
+**Bad** — too many small nodes, spreads wide:
+````
+```mermaid
+graph TD
+    A[Boot] --> B[Init services]
+    B --> C[Check flag]
+    C -->|yes| D[Validate auth]
+    D --> E[Fetch config]
+    E --> F[Start pipeline]
+    C -->|no| G[Idle]
+    F --> H[Running]
+    H --> I[Process events]
+    H --> J[Upload data]
+    H --> K[Refresh config]
+```
+````
+
+**Good** — fewer nodes, each tells a story:
+````
+```mermaid
+graph TD
+    A[Worker boots and<br/>initializes all services] --> B{Feature flag<br/>TAPLINE_ENABLED?}
+    B -->|disabled| C[Worker enters idle state,<br/>no pipeline activity]
+    B -->|enabled| D[Validates auth token,<br/>fetches whitelist config,<br/>starts capture pipeline]
+    D --> E[Pipeline running:<br/>processes CDP events,<br/>uploads captures hourly,<br/>refreshes config]
+```
+````
+
 ## Standard Markdown
 
 All GFM markdown works inside directives: headings, **bold**, *italic*, `code`, bullet/numbered lists, fenced code blocks, and GFM tables.
@@ -120,10 +162,9 @@ Attaches JWT from session store.
 
 ```mermaid
 graph TD
-    A[Client] -->|POST /api/data| B[Router]
-    B --> C{Auth Middleware}
-    C -->|valid| D[Handler]
-    C -->|invalid| E[401 Response]
+    A[Client sends POST /api/data] --> B{Auth middleware<br/>validates JWT}
+    B -->|valid| C[Handler: parse, validate, write]
+    B -->|invalid| D[401 rejected]
 ```
 
 :::columns

@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "crouton-kit",
-  "version": "1.32.0",
+  "version": "1.32.1",
   "owner": {
     "name": "Silas Rhyneer",
     "email": "silas@example.com"
@@ -78,7 +78,7 @@
       "name": "web",
       "source": "./plugins/web",
       "description": "Web development tools including frontend design workflows",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "keywords": [
         "web",
         "frontend",

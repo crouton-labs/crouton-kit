@@ -34,6 +34,7 @@ EOF
 
 jq -n --arg ctx "$CONTEXT" '{
   hookSpecificOutput: {
+    hookEventName: "PostToolUse",
     additionalContext: $ctx
   }
 }'

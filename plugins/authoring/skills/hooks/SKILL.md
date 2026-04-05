@@ -45,10 +45,26 @@ Hooks are deterministic handlers that fire at lifecycle events. Unlike instructi
 
 ## Decision Control
 
+All hook output must be wrapped in `hookSpecificOutput` with the matching `hookEventName`:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "additionalContext": "injected text"
+  }
+}
+```
+
+**`hookEventName` is required** — without it, Claude Code silently drops the payload.
+
 PreToolUse handlers can return:
 - `permissionDecision: "allow" | "deny" | "ask"` — override permission system
 - `updatedInput: {...}` — transparently modify tool parameters
 - `additionalContext: "..."` — inject text into Claude's context
+
+PostToolUse handlers can return:
+- `additionalContext: "..."` — inject text into Claude's context after tool execution
 
 Stop/SubagentStop/TeammateIdle/TaskCompleted handlers can return:
 - `decision: "block"` with `reason: "..."` — force continuation

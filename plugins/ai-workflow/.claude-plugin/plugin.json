@@ -1,5 +1,5 @@
 {
   "name": "ai-workflow",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Multi-step agent workflows — chain headless ai-cli runs with branching and Linear integration"
 }

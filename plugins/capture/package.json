@@ -3,11 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "bin": {
-    "capture": "./dist/capture.mjs"
+    "capture": "./bin/capture"
   },
   "scripts": {
-    "build": "esbuild src/capture.ts --bundle --platform=node --format=esm --outfile=dist/capture.mjs '--banner:js=#!/usr/bin/env node' --packages=external && chmod +x dist/capture.mjs",
-    "postinstall": "npm run build"
+    "build": "esbuild src/capture.ts --bundle --platform=node --format=esm --outfile=bin/capture '--banner:js=#!/usr/bin/env node' --packages=external && chmod +x bin/capture"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",

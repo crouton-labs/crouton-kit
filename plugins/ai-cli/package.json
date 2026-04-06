@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "bin": {
-    "ai": "./dist/ai.mjs"
+    "ai": "./bin/ai"
   },
   "scripts": {
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/ai.mjs --banner:js='#!/usr/bin/env node' --external:@r-cli/sdk --external:zod",
-    "dev": "npm run build && node dist/ai.mjs"
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=bin/ai --banner:js='#!/usr/bin/env node' --external:@r-cli/sdk --external:zod",
+    "dev": "npm run build && node bin/ai"
   },
   "dependencies": {
     "@r-cli/sdk": "^1.1.117",

@@ -1,0 +1,2172 @@
+#!/usr/bin/env node
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// src/har-manager.ts
+import * as fs from "fs";
+import * as path from "path";
+function harFilePath(id) {
+  return path.join(HAR_DIR, `${id}.json`);
+}
+function createHarRecording() {
+  const id = Math.random().toString(36).slice(2, 8);
+  const harPath = harFilePath(id);
+  fs.mkdirSync(HAR_DIR, { recursive: true });
+  fs.writeFileSync(harPath, JSON.stringify({ log: { entries: [] } }, null, 2));
+  return { id, path: harPath };
+}
+function readHarRecording(id) {
+  try {
+    return JSON.parse(fs.readFileSync(harFilePath(id), "utf-8"));
+  } catch {
+    return null;
+  }
+}
+function appendToHarRecording(id, entries) {
+  const harPath = harFilePath(id);
+  let har;
+  try {
+    har = JSON.parse(fs.readFileSync(harPath, "utf-8"));
+  } catch {
+    har = { log: { entries: [] } };
+  }
+  har.log.entries.push(...entries);
+  fs.writeFileSync(harPath, JSON.stringify(har, null, 2));
+}
+function deleteHarRecording(id) {
+  try {
+    fs.unlinkSync(harFilePath(id));
+  } catch {
+  }
+}
+var HAR_DIR;
+var init_har_manager = __esm({
+  "src/har-manager.ts"() {
+    HAR_DIR = "/tmp/capture-har";
+  }
+});
+
+// src/session-context.ts
+import * as fs2 from "fs";
+import * as path2 from "path";
+import * as os from "os";
+function getActiveSession() {
+  try {
+    if (!fs2.existsSync(ACTIVE_PATH)) return null;
+    const state = JSON.parse(fs2.readFileSync(ACTIVE_PATH, "utf-8"));
+    if (!fs2.existsSync(state.dir)) {
+      clearActiveSession();
+      return null;
+    }
+    return state;
+  } catch {
+    return null;
+  }
+}
+function setActiveSession(state) {
+  fs2.mkdirSync(CAPTURE_ROOT, { recursive: true });
+  fs2.writeFileSync(ACTIVE_PATH, JSON.stringify(state, null, 2));
+}
+function clearActiveSession() {
+  try {
+    fs2.unlinkSync(ACTIVE_PATH);
+  } catch {
+  }
+}
+function updateActiveSession(patch) {
+  const current = getActiveSession();
+  if (!current) return null;
+  const updated = { ...current, ...patch };
+  setActiveSession(updated);
+  return updated;
+}
+function sanitizeLabel(label) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+}
+function nextStepPath(action, label) {
+  const session = getActiveSession();
+  if (!session) return null;
+  const step = session.stepCount + 1;
+  const nn = String(step).padStart(2, "0");
+  const sanitized = sanitizeLabel(label);
+  const filename = `${nn}-${action}-${sanitized}.png`;
+  const shotPath = path2.join(session.dir, "shots", filename);
+  updateActiveSession({ stepCount: step });
+  return shotPath;
+}
+var CAPTURE_ROOT, ACTIVE_PATH;
+var init_session_context = __esm({
+  "src/session-context.ts"() {
+    CAPTURE_ROOT = path2.join(os.tmpdir(), "capture-sessions");
+    ACTIVE_PATH = path2.join(CAPTURE_ROOT, ".active");
+  }
+});
+
+// src/interact.ts
+async function clickByName(client, name, role) {
+  await client.send("Accessibility.enable");
+  await client.send("DOM.enable");
+  const { nodes } = await client.send("Accessibility.getFullAXTree");
+  await client.send("Accessibility.disable");
+  const nameLower = name.toLowerCase();
+  const matches = nodes.filter((n) => {
+    if (!n.backendDOMNodeId) return false;
+    if (!n.name?.value) return false;
+    if (n.name.value.toLowerCase() !== nameLower) return false;
+    if (role && n.role?.value !== role) return false;
+    return true;
+  });
+  if (matches.length === 0) {
+    throw new Error(
+      `No element found with accessible name "${name}"${role ? ` and role "${role}"` : ""}. Run \`capture a11y --interactive\` to see available elements.`
+    );
+  }
+  if (matches.length > 1 && !role) {
+    const INPUT_ROLES = /* @__PURE__ */ new Set(["textbox", "searchbox", "combobox", "textarea", "spinbutton"]);
+    const inputMatches = matches.filter((n) => n.role?.value && INPUT_ROLES.has(n.role.value));
+    if (inputMatches.length === 1) {
+      matches.length = 0;
+      matches.push(inputMatches[0]);
+    } else {
+      const summary = matches.slice(0, 5).map((n) => `  ${n.role?.value} "${n.name?.value}"`).join("\n");
+      throw new Error(
+        `Multiple elements match "${name}" \u2014 disambiguate with --role:
+${summary}`
+      );
+    }
+  }
+  const match = matches[0];
+  const backendNodeId = match.backendDOMNodeId;
+  await client.send("DOM.scrollIntoViewIfNeeded", { backendNodeId });
+  const { model } = await client.send("DOM.getBoxModel", { backendNodeId });
+  const quad = model.content;
+  const x = (quad[0] + quad[2] + quad[4] + quad[6]) / 4;
+  const y = (quad[1] + quad[3] + quad[5] + quad[7]) / 4;
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x,
+    y,
+    button: "left",
+    clickCount: 1
+  });
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x,
+    y,
+    button: "left",
+    clickCount: 1
+  });
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    role: match.role?.value ?? "unknown",
+    name: match.name?.value ?? name
+  };
+}
+async function typeText(client, text) {
+  await client.send("Input.insertText", { text });
+}
+async function focusAndType(client, fieldName, text, role) {
+  const result = await clickByName(client, fieldName, role);
+  await new Promise((r) => setTimeout(r, 100));
+  await typeText(client, text);
+  return result;
+}
+var init_interact = __esm({
+  "src/interact.ts"() {
+  }
+});
+
+// src/cdp.ts
+var cdp_exports = {};
+__export(cdp_exports, {
+  CDPClient: () => CDPClient,
+  ConsoleRecorder: () => ConsoleRecorder,
+  HARRecorder: () => HARRecorder,
+  acquireTabLock: () => acquireTabLock,
+  captureScreenshot: () => captureScreenshot,
+  cdpMain: () => main,
+  detectCdpPort: () => detectCdpPort,
+  executeInBrowser: () => executeInBrowser,
+  findTab: () => findTab,
+  findTabById: () => findTabById,
+  getAccessibilityTree: () => getAccessibilityTree,
+  isTabLocked: () => isTabLocked,
+  listTargets: () => listTargets,
+  navigateAndRecord: () => navigateAndRecord,
+  navigateAndWait: () => navigateAndWait,
+  openTab: () => openTab,
+  recordTraffic: () => recordTraffic,
+  releaseTabLock: () => releaseTabLock,
+  withTabLock: () => withTabLock
+});
+import { execSync } from "child_process";
+import * as fs3 from "fs";
+import * as os2 from "os";
+import * as path3 from "path";
+import WebSocket from "ws";
+function shouldRecordRequest(url) {
+  if (SKIP_EXTENSIONS.test(url)) return false;
+  if (SKIP_DOMAINS.test(url)) return false;
+  return true;
+}
+function printConsoleSummary(entries) {
+  const errors = entries.filter((e) => e.level === "error");
+  const warnings = entries.filter((e) => e.level === "warning");
+  if (errors.length > 0 || warnings.length > 0) {
+    console.error(
+      `
+Console: ${errors.length} errors, ${warnings.length} warnings`
+    );
+    for (const entry of [...errors, ...warnings]) {
+      const prefix = entry.level === "error" ? "ERR" : "WARN";
+      const src = entry.source ? ` (${entry.source})` : "";
+      const text = entry.text.length > 200 ? entry.text.slice(0, 197) + "..." : entry.text;
+      console.error(`  [${prefix}] ${text}${src}`);
+    }
+  }
+}
+function writeHarAndPrintSummary(har, harOutPath) {
+  if (har.log.entries.length === 0 && !harOutPath) return void 0;
+  const harPath = harOutPath ?? `/tmp/capture-har-${Date.now()}.json`;
+  try {
+    fs3.writeFileSync(harPath, JSON.stringify(har, null, 2));
+  } catch (err) {
+    const stripped = {
+      log: {
+        ...har.log,
+        entries: har.log.entries.map((e) => ({
+          ...e,
+          response: { ...e.response, content: { text: "[body stripped \u2014 too large to serialize]" } }
+        }))
+      }
+    };
+    fs3.writeFileSync(harPath, JSON.stringify(stripped, null, 2));
+    console.error("  WARNING: Response bodies stripped from HAR (too large to serialize)");
+  }
+  const errors = har.log.entries.filter((e) => e.response.status >= 400);
+  console.error(
+    `
+HAR: ${har.log.entries.length} requests captured \u2192 ${harPath}`
+  );
+  if (errors.length > 0) {
+    console.error(`  ${errors.length} failed:`);
+    for (const entry of errors) {
+      const method = entry.request.method.padEnd(6);
+      const status = entry.response.status;
+      const url = entry.request.url.length > 100 ? entry.request.url.slice(0, 97) + "..." : entry.request.url;
+      console.error(`  ${method} ${status} ${url}`);
+    }
+  }
+  return harPath;
+}
+function parseCliArgs(argv) {
+  const command = argv[0] ?? "";
+  const positional = [];
+  const parsed = { command, positional };
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+    const next = argv[i + 1];
+    if (arg === "--port" && next) {
+      parsed.port = parseInt(next, 10);
+      i++;
+    } else if (arg === "--out" && next) {
+      parsed.out = next;
+      i++;
+    } else if (arg === "--json") {
+      parsed.json = true;
+    } else if (arg === "--interactive") {
+      parsed.interactive = true;
+    } else if (arg === "--har-out" && next) {
+      parsed.harOut = next;
+      i++;
+    } else if (arg === "--record") {
+      parsed.record = true;
+    } else if (arg === "--duration" && next) {
+      parsed.duration = parseInt(next, 10);
+      i++;
+    } else if (arg === "--settle" && next) {
+      parsed.settle = parseInt(next, 10);
+      i++;
+    } else if (arg === "--file" && next) {
+      parsed.file = next;
+      i++;
+    } else if (arg === "--nested") {
+      parsed.nested = true;
+    } else if (arg === "--har" && next) {
+      parsed.har = next;
+      i++;
+    } else if (arg === "--new") {
+      parsed.new = true;
+    } else if (arg === "--target" && next) {
+      parsed.target = next;
+      i++;
+    } else if (arg === "--role" && next) {
+      parsed.role = next;
+      i++;
+    } else if (arg === "--into" && next) {
+      parsed.into = next;
+      i++;
+    } else if (arg === "--no-screenshot") {
+      parsed.noScreenshot = true;
+    } else if (arg === "--viewport" && next) {
+      parsed.viewport = next;
+      i++;
+    } else if (arg === "--full-page") {
+      parsed.fullPage = true;
+    } else if (arg === "--height" && next) {
+      parsed.height = parseInt(next, 10);
+      i++;
+    } else if (arg === "--help" || arg === "-h") {
+      parsed.help = true;
+    } else if (arg.startsWith("--")) {
+      console.error(`Unknown flag: ${arg}`);
+      process.exit(1);
+    } else {
+      positional.push(arg);
+    }
+  }
+  if (!parsed.target && process.env.CDP_TARGET) {
+    parsed.target = process.env.CDP_TARGET;
+  }
+  if (!parsed.har && process.env.CDP_HAR_ID) {
+    parsed.har = process.env.CDP_HAR_ID;
+  }
+  const session = getActiveSession();
+  if (session) {
+    if (!parsed.har && session.harId) parsed.har = session.harId;
+    if (!parsed.target && session.targetId) parsed.target = session.targetId;
+  }
+  return parsed;
+}
+async function connectForCommand(parsed) {
+  if (!parsed.target) {
+    throw new Error('Use --target <tabId> to target a tab. Run "capture list" to see available tabs.');
+  }
+  let tab = null;
+  if (parsed.port) {
+    tab = await findTabById(parsed.port, parsed.target);
+  } else {
+    const endpoints = await detectCdpPortsAsync();
+    for (const ep of endpoints) {
+      try {
+        tab = await findTabById(ep.port, parsed.target);
+        if (tab) break;
+      } catch {
+      }
+    }
+  }
+  if (!tab) {
+    const query = parsed.target;
+    throw new Error(
+      `No tab found for target "${query}". Run "capture list" to see available tabs.`
+    );
+  }
+  if (!tab.webSocketDebuggerUrl) {
+    throw new Error("Tab has no WebSocket debugger URL");
+  }
+  const activeSession = getActiveSession();
+  if (activeSession && !activeSession.targetId) {
+    updateActiveSession({ targetId: tab.id });
+  }
+  const client = new CDPClient(tab.webSocketDebuggerUrl);
+  await client.waitReady();
+  return { client, tab };
+}
+async function withConnection(parsed, fn, opts = {}) {
+  const { client, tab } = await connectForCommand(parsed);
+  const consoleRecorder = new ConsoleRecorder(client);
+  await consoleRecorder.start();
+  let harRecorder;
+  if (parsed.har) {
+    const harPath = harFilePath(parsed.har);
+    if (!fs3.existsSync(harPath)) {
+      console.error(
+        `ERROR: No HAR recording found for --har "${parsed.har}". Run 'har create' first.`
+      );
+      process.exit(1);
+    }
+    harRecorder = new HARRecorder(client);
+    await harRecorder.start();
+  }
+  try {
+    const result = await fn(client, tab);
+    if (harRecorder && parsed.har) {
+      const settle = opts.settle !== void 0 ? opts.settle : 3e3;
+      if (settle > 0) {
+        await new Promise((r) => setTimeout(r, settle));
+      }
+      const har = await harRecorder.finish();
+      if (har.log.entries.length > 0) {
+        appendToHarRecording(parsed.har, har.log.entries);
+        console.error(
+          `  [har:${parsed.har}] +${har.log.entries.length} entries`
+        );
+      }
+    }
+    printConsoleSummary(consoleRecorder.finish());
+    return result;
+  } finally {
+    client.close();
+  }
+}
+function flattenA11yTree(nodes, opts = {}, depth = 0) {
+  const lines = [];
+  for (const node of nodes) {
+    if (opts.interactive && !INTERACTIVE_ROLES.has(node.role)) {
+      lines.push(...flattenA11yTree(node.children, opts, depth));
+      continue;
+    }
+    if (!node.role || node.role === "StaticText") {
+      lines.push(...flattenA11yTree(node.children, opts, depth));
+      continue;
+    }
+    const indent = "  ".repeat(depth);
+    const nameStr = node.name ? ` "${node.name}"` : "";
+    lines.push(`${indent}${node.role}${nameStr}`);
+    lines.push(...flattenA11yTree(node.children, opts, depth + 1));
+  }
+  return lines;
+}
+function getDefaultBrowserId() {
+  try {
+    const output = execSync(
+      "defaults read com.apple.LaunchServices/com.apple.launchservices.secure LSHandlers 2>/dev/null",
+      { encoding: "utf-8" }
+    );
+    const match = output.match(
+      /LSHandlerRoleAll = "([^"]+)";\s*LSHandlerURLScheme = https;/
+    );
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+async function probeCdpPort(port) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 500);
+    const resp = await fetch(`http://localhost:${port}/json/version`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (resp.ok) {
+      const version = await resp.json();
+      const browser = version.Browser;
+      const userAgent = version["User-Agent"] ?? "";
+      if (!browser) return null;
+      const isElectron = userAgent.includes("Electron");
+      let app = browser;
+      if (isElectron) {
+        const appMatch = userAgent.match(
+          /(\S+?)\/[\d.]+ Chrome\/[\d.]+ Electron/
+        );
+        if (appMatch) app = appMatch[1];
+      }
+      return { browser, app, isElectron };
+    }
+  } catch {
+  }
+  return null;
+}
+function getLocalhostListeningPorts() {
+  try {
+    const output = execSync(
+      'netstat -an 2>/dev/null | grep "127.0.0.1.*LISTEN"',
+      { encoding: "utf-8" }
+    );
+    const ports = [];
+    for (const line of output.split("\n")) {
+      const match = line.match(/127\.0\.0\.1\.(\d+)/);
+      if (match) {
+        ports.push(parseInt(match[1], 10));
+      }
+    }
+    return ports;
+  } catch {
+    return [];
+  }
+}
+async function detectCdpPortsAsync() {
+  const ports = getLocalhostListeningPorts();
+  const results = [];
+  const probes = ports.map(async (port) => {
+    const probe = await probeCdpPort(port);
+    if (probe) {
+      const lower = probe.browser.toLowerCase();
+      let bundleId = "unknown";
+      for (const [bid, patterns] of Object.entries(BROWSER_PATTERNS)) {
+        if (patterns.some((p) => lower.includes(p))) {
+          bundleId = bid;
+          break;
+        }
+      }
+      results.push({
+        port,
+        app: probe.app,
+        bundleId,
+        isElectron: probe.isElectron
+      });
+    }
+  });
+  await Promise.all(probes);
+  return results;
+}
+async function detectCdpPort() {
+  const endpoints = await detectCdpPortsAsync();
+  if (endpoints.length === 0) {
+    throw new Error(
+      "No browser with CDP found. Start your browser with remote debugging enabled:\n  Arc: Already enabled by default\n  Chrome: --remote-debugging-port=9222\n  Electron apps expose CDP automatically"
+    );
+  }
+  const defaultBrowser = getDefaultBrowserId();
+  if (defaultBrowser) {
+    const match = endpoints.find(
+      (p) => p.bundleId === defaultBrowser && !p.isElectron
+    );
+    if (match) return match.port;
+  }
+  const nonElectron = endpoints.find((p) => !p.isElectron);
+  return (nonElectron ?? endpoints[0]).port;
+}
+async function getBrowserClient(port) {
+  const versionResp = await fetch(`http://localhost:${port}/json/version`);
+  if (!versionResp.ok) {
+    throw new Error(
+      `Failed to connect to CDP on port ${port}: ${versionResp.status}`
+    );
+  }
+  const version = await versionResp.json();
+  const client = new CDPClient(version.webSocketDebuggerUrl);
+  await client.waitReady();
+  return { client, browserWsUrl: version.webSocketDebuggerUrl };
+}
+async function listTargets(port) {
+  const { client } = await getBrowserClient(port);
+  try {
+    await client.send("Target.setDiscoverTargets", { discover: true });
+    const result = await client.send("Target.getTargets");
+    return result.targetInfos.map((t) => ({
+      id: t.targetId,
+      title: t.title,
+      url: t.url,
+      type: t.type,
+      webSocketDebuggerUrl: `ws://localhost:${port}/devtools/page/${t.targetId}`
+    }));
+  } finally {
+    client.close();
+  }
+}
+async function findTab(port, urlPattern) {
+  const targets = await listTargets(port);
+  const pages = targets.filter((t) => t.type === "page");
+  if (!urlPattern) {
+    return pages[0] ?? null;
+  }
+  const pattern = urlPattern.toLowerCase();
+  return pages.find((t) => t.url.toLowerCase().includes(pattern)) ?? null;
+}
+async function findTabById(port, targetId) {
+  const targets = await listTargets(port);
+  const exact = targets.find((t) => t.id === targetId);
+  if (exact) return exact;
+  if (targetId.length >= 4) {
+    const prefix = targetId.toUpperCase();
+    const matches = targets.filter((t) => t.id.toUpperCase().startsWith(prefix));
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) {
+      throw new Error(
+        `Ambiguous target prefix "${targetId}" matches ${matches.length} tabs:
+` + matches.map((t) => `  ${t.id.slice(0, 8)}  ${t.url}`).join("\n")
+      );
+    }
+  }
+  return null;
+}
+async function openTab(port, url) {
+  const { client } = await getBrowserClient(port);
+  try {
+    const result = await client.send("Target.createTarget", {
+      url,
+      background: true
+    });
+    return {
+      id: result.targetId,
+      title: "",
+      url,
+      type: "page",
+      webSocketDebuggerUrl: `ws://localhost:${port}/devtools/page/${result.targetId}`
+    };
+  } finally {
+    client.close();
+  }
+}
+async function captureScreenshot(client, viewport, options) {
+  const MAX_DIM = 1600;
+  if (viewport) {
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  if (options?.fullPage) {
+    const layoutMetrics = await client.send("Page.getLayoutMetrics");
+    const contentWidth = layoutMetrics.cssVisualViewport?.clientWidth ?? viewport?.width ?? 1280;
+    const contentHeight = layoutMetrics.contentSize?.height ?? viewport?.height ?? 800;
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width: contentWidth,
+      height: Math.ceil(contentHeight),
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  let screenshotOpts = {
+    format: "png",
+    captureBeyondViewport: false
+  };
+  try {
+    const metrics = await client.send("Page.getLayoutMetrics");
+    const vw = metrics.cssVisualViewport?.clientWidth ?? 0;
+    const vh = metrics.cssVisualViewport?.clientHeight ?? 0;
+    const sx = metrics.cssVisualViewport?.pageX ?? 0;
+    const sy = metrics.cssVisualViewport?.pageY ?? 0;
+    const dprResult = await client.send("Runtime.evaluate", {
+      expression: "window.devicePixelRatio",
+      returnByValue: true
+    });
+    const dpr = dprResult.result.value ?? 1;
+    const actualMaxSide = Math.max(vw, vh) * dpr;
+    const scale = actualMaxSide > MAX_DIM ? MAX_DIM / actualMaxSide : 1 / dpr;
+    screenshotOpts = {
+      ...screenshotOpts,
+      clip: { x: sx, y: sy, width: vw, height: vh, scale }
+    };
+  } catch {
+  }
+  const result = await client.send(
+    "Page.captureScreenshot",
+    screenshotOpts
+  );
+  if (viewport || options?.fullPage) {
+    await client.send("Emulation.clearDeviceMetricsOverride");
+  }
+  return Buffer.from(result.data, "base64");
+}
+async function getAccessibilityTree(client) {
+  await client.send("Accessibility.enable");
+  const result = await client.send("Accessibility.getFullAXTree");
+  await client.send("Accessibility.disable");
+  const nodeMap = /* @__PURE__ */ new Map();
+  for (const node of result.nodes) {
+    nodeMap.set(node.nodeId, node);
+  }
+  const SKIP_ROLES = /* @__PURE__ */ new Set(["none", "generic", "InlineTextBox"]);
+  function buildNode(node) {
+    const role = node.role?.value ?? "";
+    const childNodes = (node.childIds ?? []).flatMap((id) => {
+      const child = nodeMap.get(id);
+      return child ? buildNode(child) : [];
+    });
+    if (SKIP_ROLES.has(role)) {
+      return childNodes;
+    }
+    return [
+      {
+        role,
+        name: node.name?.value ?? "",
+        children: childNodes
+      }
+    ];
+  }
+  const root = result.nodes[0];
+  return root ? buildNode(root) : [];
+}
+async function executeInBrowser(code, options = {}) {
+  const port = options.port ?? await detectCdpPort();
+  if (!options.targetId) {
+    throw new Error('Use --target <tabId> to target a tab. Run "capture list" to see available tabs.');
+  }
+  let tab = null;
+  tab = await findTabById(port, options.targetId);
+  if (!tab) {
+    throw new Error(
+      `No tab found for target "${options.targetId}". Run "capture list" to see available tabs.`
+    );
+  }
+  if (!tab.webSocketDebuggerUrl) {
+    throw new Error("Tab has no WebSocket debugger URL");
+  }
+  const client = new CDPClient(tab.webSocketDebuggerUrl);
+  await client.waitReady();
+  await client.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  const consoleRecorder = new ConsoleRecorder(client);
+  await consoleRecorder.start();
+  let harRecorder;
+  if (options.record) {
+    harRecorder = new HARRecorder(client);
+    await harRecorder.start();
+  }
+  try {
+    const result = await client.send(
+      "Runtime.evaluate",
+      {
+        expression: code,
+        awaitPromise: true,
+        returnByValue: true
+      },
+      options.timeoutMs
+    );
+    let har;
+    if (harRecorder) {
+      har = await harRecorder.finish();
+      writeHarAndPrintSummary(har, options.harOutPath);
+    }
+    const consoleEntries = consoleRecorder.finish();
+    printConsoleSummary(consoleEntries);
+    client.close();
+    if (result.exceptionDetails) {
+      return {
+        success: false,
+        error: result.exceptionDetails.exception?.description ?? "Unknown error",
+        har,
+        console: consoleEntries
+      };
+    }
+    return {
+      success: true,
+      value: result.result?.value,
+      har,
+      console: consoleEntries
+    };
+  } catch (err) {
+    const consoleEntries = consoleRecorder.finish();
+    client.close();
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+      console: consoleEntries
+    };
+  }
+}
+async function recordTraffic(options) {
+  const port = options.port ?? await detectCdpPort();
+  const duration = options.duration ?? 10;
+  if (!options.targetId) {
+    throw new Error('Use --target <tabId> to target a tab. Run "capture list" to see available tabs.');
+  }
+  const tab = await findTabById(port, options.targetId);
+  if (!tab) {
+    throw new Error(
+      `No tab found for target "${options.targetId}". Run "capture list" to see available tabs.`
+    );
+  }
+  if (!tab.webSocketDebuggerUrl) {
+    throw new Error("Tab has no WebSocket debugger URL");
+  }
+  const client = new CDPClient(tab.webSocketDebuggerUrl);
+  await client.waitReady();
+  const recorder = new HARRecorder(client);
+  await recorder.start();
+  console.error(
+    `Recording traffic on "${tab.url}" for ${duration}s... (click around in the browser)`
+  );
+  await new Promise((r) => setTimeout(r, duration * 1e3));
+  const har = await recorder.finish();
+  const harPath = writeHarAndPrintSummary(har, options.harOutPath);
+  client.close();
+  return { harPath, entryCount: har.log.entries.length, har };
+}
+async function navigateAndRecord(options) {
+  const port = options.port ?? await detectCdpPort();
+  const settle = options.settle ?? 2e3;
+  let tab = null;
+  let isNewTab = false;
+  if (options.targetId) {
+    tab = await findTabById(port, options.targetId);
+    if (!tab) {
+      throw new Error(
+        `No tab found with target ID "${options.targetId}". Tab may have been closed.`
+      );
+    }
+  } else {
+    let domain;
+    try {
+      domain = new URL(options.url).hostname;
+    } catch {
+      throw new Error(`Invalid URL: ${options.url}`);
+    }
+    tab = await findTab(port, domain);
+    if (!tab) {
+      tab = await openTab(port, options.url);
+      isNewTab = true;
+    }
+  }
+  if (!tab.webSocketDebuggerUrl) {
+    throw new Error("Tab has no WebSocket debugger URL");
+  }
+  const client = new CDPClient(tab.webSocketDebuggerUrl);
+  await client.waitReady();
+  await client.send("Page.enable");
+  const recorder = new HARRecorder(client);
+  await recorder.start();
+  if (!isNewTab) {
+    console.error(`Navigating to: ${options.url}`);
+    await client.send("Page.navigate", { url: options.url });
+  }
+  const deadline = 6e4;
+  const t0 = Date.now();
+  let timedOut = false;
+  let har;
+  try {
+    await Promise.race([
+      (async () => {
+        await new Promise((resolve2) => {
+          const timer = setTimeout(() => {
+            console.error("Page load timeout (10s), continuing with settle...");
+            resolve2();
+          }, 1e4);
+          client.on("Page.loadEventFired", () => {
+            clearTimeout(timer);
+            resolve2();
+          });
+        });
+        console.error(`Settling for ${settle}ms...`);
+        await new Promise((r) => setTimeout(r, settle));
+        har = await recorder.finish();
+      })(),
+      new Promise((_, reject) => {
+        const t = setTimeout(() => reject(new Error("__navigate_timeout__")), deadline - (Date.now() - t0));
+        if (typeof t === "object" && "unref" in t) t.unref();
+      })
+    ]);
+  } catch (err) {
+    if (err instanceof Error && err.message === "__navigate_timeout__") {
+      timedOut = true;
+      console.error("Navigate timeout (60s) \u2014 returning partial HAR");
+      har = recorder.finishPartial();
+    } else {
+      throw err;
+    }
+  }
+  const harPath = writeHarAndPrintSummary(har, options.harOutPath);
+  client.close();
+  const updatedTab = await findTab(port, options.url) ?? tab;
+  return { harPath, entryCount: har.log.entries.length, har, tab: updatedTab, timedOut };
+}
+async function navigateAndWait(port, url, options = {}) {
+  const timeout = options.timeout ?? 1e4;
+  if (!options.forceNew) {
+    const existing = await findTab(port, url);
+    if (existing) {
+      return existing;
+    }
+  }
+  const tab = await openTab(port, url);
+  if (!tab.webSocketDebuggerUrl) {
+    throw new Error("New tab has no WebSocket debugger URL");
+  }
+  const client = new CDPClient(tab.webSocketDebuggerUrl);
+  await client.waitReady();
+  await client.send("Page.enable");
+  await new Promise((resolve2, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Page load timeout: ${url}`)),
+      timeout
+    );
+    client.on("Page.loadEventFired", () => {
+      clearTimeout(timer);
+      resolve2();
+    });
+  });
+  client.close();
+  const targets = await listTargets(port);
+  const refreshed = targets.find((t) => t.id === tab.id);
+  return refreshed ?? tab;
+}
+function lockPath(tabId) {
+  return path3.join(LOCK_DIR, `capture-cdp-tab-${tabId}.lock`);
+}
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isLockStale(filePath) {
+  try {
+    const content = fs3.readFileSync(filePath, "utf-8");
+    const { pid, ts } = JSON.parse(content);
+    if (!isPidAlive(pid)) return true;
+    return Date.now() - ts > LOCK_STALE_MS;
+  } catch {
+    return true;
+  }
+}
+function registerCleanup() {
+  if (cleanupRegistered) return;
+  cleanupRegistered = true;
+  const cleanup = () => {
+    for (const file of heldLocks) {
+      try {
+        fs3.unlinkSync(file);
+      } catch {
+      }
+    }
+    heldLocks.clear();
+  };
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => {
+    cleanup();
+    process.exit(130);
+  });
+  process.on("SIGTERM", () => {
+    cleanup();
+    process.exit(143);
+  });
+}
+async function acquireTabLock(tabId) {
+  registerCleanup();
+  const file = lockPath(tabId);
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  let delay = LOCK_POLL_BASE_MS;
+  while (true) {
+    try {
+      const fd = fs3.openSync(file, "wx");
+      fs3.writeSync(fd, JSON.stringify({ pid: process.pid, ts: Date.now() }));
+      fs3.closeSync(fd);
+      heldLocks.add(file);
+      return;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+    if (isLockStale(file)) {
+      try {
+        fs3.unlinkSync(file);
+      } catch {
+      }
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out waiting for CDP tab lock (${tabId}). Another process may be using this tab. Lock file: ${file}`
+      );
+    }
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 2, 2e3);
+  }
+}
+function isTabLocked(tabId) {
+  const file = lockPath(tabId);
+  try {
+    fs3.accessSync(file);
+    return !isLockStale(file);
+  } catch {
+    return false;
+  }
+}
+function releaseTabLock(tabId) {
+  const file = lockPath(tabId);
+  heldLocks.delete(file);
+  try {
+    fs3.unlinkSync(file);
+  } catch {
+  }
+}
+async function withTabLock(tabId, fn) {
+  await acquireTabLock(tabId);
+  try {
+    return await fn();
+  } finally {
+    releaseTabLock(tabId);
+  }
+}
+async function autoScreenshot(client, action, label, noScreenshot) {
+  if (noScreenshot) return null;
+  const shotPath = nextStepPath(action, label);
+  if (!shotPath) return null;
+  await new Promise((r) => setTimeout(r, 300));
+  const png = await captureScreenshot(client);
+  fs3.writeFileSync(shotPath, png);
+  console.error(`  [screenshot] ${shotPath}`);
+  return shotPath;
+}
+async function main() {
+  const args = process.argv.slice(2);
+  const parsed = parseCliArgs(args);
+  switch (parsed.command) {
+    case "detect": {
+      if (parsed.help) {
+        console.log(
+          "Usage: capture detect\n\nDetect CDP port (prioritizes default browser).\nReturns JSON with port, app name, and all discovered endpoints."
+        );
+        process.exit(0);
+      }
+      const endpoints = await detectCdpPortsAsync();
+      if (endpoints.length === 0) {
+        console.error(
+          "ERROR: No browser with CDP found.\n\nFix: Start a browser with remote debugging enabled:\n  Arc: Already enabled by default\n  Chrome: --remote-debugging-port=9222\n  Electron apps expose CDP automatically"
+        );
+        process.exit(1);
+      }
+      const defaultBrowser = getDefaultBrowserId();
+      const preferred = endpoints.find(
+        (p) => p.bundleId === defaultBrowser && !p.isElectron
+      ) ?? endpoints.find((p) => !p.isElectron) ?? endpoints[0];
+      console.log(
+        JSON.stringify(
+          {
+            port: preferred.port,
+            app: preferred.app,
+            isElectron: preferred.isElectron,
+            all: endpoints.map((e) => ({
+              port: e.port,
+              app: e.app,
+              isElectron: e.isElectron
+            }))
+          },
+          null,
+          2
+        )
+      );
+      console.error(
+        `
+Found ${endpoints.length} CDP endpoint${endpoints.length > 1 ? "s" : ""}. Default: port ${preferred.port} (${preferred.app}).
+
+Next: capture list --port ${preferred.port}`
+      );
+      break;
+    }
+    case "list": {
+      if (parsed.help) {
+        console.log(
+          "Usage: capture list [--port <port>]\n\nList all browser tabs across all CDP endpoints (or a specific port).\nReturns JSON array of {id, title, url, port, app}."
+        );
+        process.exit(0);
+      }
+      if (parsed.port) {
+        const targets = await listTargets(parsed.port);
+        const pages = targets.filter((t) => t.type === "page");
+        console.log(JSON.stringify(pages.map((t) => ({
+          id: t.id,
+          title: t.title,
+          url: t.url
+        })), null, 2));
+        console.error(
+          `
+${pages.length} tab${pages.length !== 1 ? "s" : ""} on port ${parsed.port}.
+
+Target a tab with: --target <id prefix>  (first 8 chars sufficient)`
+        );
+      } else {
+        const endpoints = await detectCdpPortsAsync();
+        if (endpoints.length === 0) {
+          console.error("No CDP endpoints found.");
+          process.exit(1);
+        }
+        const allPages = [];
+        await Promise.all(endpoints.map(async (ep) => {
+          try {
+            const targets = await listTargets(ep.port);
+            const pages = targets.filter((t) => t.type === "page");
+            for (const t of pages) {
+              allPages.push({ id: t.id, title: t.title, url: t.url, port: ep.port, app: ep.app });
+            }
+          } catch {
+          }
+        }));
+        console.log(JSON.stringify(allPages, null, 2));
+        console.error(
+          `
+${allPages.length} tab${allPages.length !== 1 ? "s" : ""} across ${endpoints.length} CDP endpoint${endpoints.length !== 1 ? "s" : ""}.
+
+Target a tab with: --target <id prefix>  (first 8 chars sufficient)`
+        );
+      }
+      break;
+    }
+    case "open": {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture open <url> [--new] [--port <port>]\n\nOpen URL in browser (returns tab ID).\n\nExample: capture open "https://app.example.com" --new'
+        );
+        process.exit(0);
+      }
+      const url = parsed.positional[0];
+      if (!url) {
+        console.error(
+          'ERROR: Missing URL.\n\nUsage: capture open <url> [--new] [--port <port>]\n\nExample: capture open "https://app.example.com" --new'
+        );
+        process.exit(1);
+      }
+      const p = parsed.port ?? await detectCdpPort();
+      const tab = await navigateAndWait(p, url, { forceNew: parsed.new });
+      console.log(JSON.stringify({
+        id: tab.id,
+        title: tab.title,
+        url: tab.url,
+        port: p
+      }, null, 2));
+      console.error(
+        `
+Opened: ${tab.title || url}
+
+Next: capture exec "<js>" --port ${p} --target ${tab.id.slice(0, 8)}
+      capture screenshot --port ${p} --target ${tab.id.slice(0, 8)}
+      capture a11y --port ${p} --target ${tab.id.slice(0, 8)}`
+      );
+      break;
+    }
+    case "exec": {
+      if (parsed.help) {
+        console.log(
+          `Usage: capture exec <code> [--target <id>] [--record] [--file <path>] [--har <id>]
+
+Execute JavaScript in a browser tab. Supports await (wrapped in async IIFE).
+
+Examples:
+  capture exec "document.title" --target <id>
+  capture exec "await fetch('/api/data').then(r=>r.json())" --target <id>
+  capture exec "document.querySelector('.btn').click()" --target <id>
+  capture exec --file /tmp/scrape.js --target <id> --record`
+        );
+        process.exit(0);
+      }
+      let code;
+      if (parsed.file) {
+        code = fs3.readFileSync(parsed.file, "utf-8");
+      } else {
+        code = parsed.positional[0];
+        if (!code) {
+          console.error(
+            `ERROR: Missing code to execute.
+
+Usage: capture exec <code> [--target <id>] [--record] [--file <path>]
+
+Examples:
+  capture exec "document.title" --target <id>
+  capture exec "document.querySelector('.btn').click()" --target <id>
+  capture exec --file /tmp/scrape.js --target <id> --record`
+          );
+          process.exit(1);
+        }
+      }
+      await withConnection(
+        parsed,
+        async (client) => {
+          await client.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+          let standaloneRecorder;
+          if (parsed.record) {
+            standaloneRecorder = new HARRecorder(client);
+            await standaloneRecorder.start();
+          }
+          const needsAsyncWrap = /\bawait\b/.test(code);
+          const expression = needsAsyncWrap ? `(async () => { ${code} })()` : code;
+          const evalResult = await client.send("Runtime.evaluate", {
+            expression,
+            awaitPromise: true,
+            returnByValue: true
+          });
+          if (standaloneRecorder) {
+            const har = await standaloneRecorder.finish();
+            writeHarAndPrintSummary(har, parsed.harOut);
+          }
+          if (evalResult.exceptionDetails) {
+            console.error(
+              `ERROR: ${evalResult.exceptionDetails.exception?.description ?? "Unknown error"}`
+            );
+            process.exit(1);
+          }
+          console.log(JSON.stringify(evalResult.result?.value));
+        },
+        { settle: 3e3 }
+      );
+      break;
+    }
+    case "record": {
+      if (parsed.help) {
+        console.log(
+          "Usage: capture record --target <id> [--duration <secs>] [--har-out <path>]\n\nPassive HAR recording for the specified duration (default: 10s)."
+        );
+        process.exit(0);
+      }
+      if (!parsed.target) {
+        console.error(
+          "Usage: capture record --target <id> [--duration <secs>] [--har-out <path>]"
+        );
+        process.exit(1);
+      }
+      const result = await recordTraffic({
+        port: parsed.port,
+        targetId: parsed.target,
+        duration: parsed.duration,
+        harOutPath: parsed.harOut
+      });
+      console.log(
+        JSON.stringify(
+          { entryCount: result.entryCount, harPath: result.harPath },
+          null,
+          2
+        )
+      );
+      break;
+    }
+    case "reset-tab": {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture reset-tab <url> [--port <port>]\n\nAbandon a stuck/unresponsive tab and open a fresh one.\nUpdates session context so subsequent commands auto-target the new tab.\n\nExample: capture reset-tab "https://www.instagram.com/"'
+        );
+        process.exit(0);
+      }
+      const url = parsed.positional[0];
+      if (!url) {
+        console.error(
+          "Usage: capture reset-tab <url> [--port <port>]"
+        );
+        process.exit(1);
+      }
+      const p = parsed.port ?? await detectCdpPort();
+      const tab = await openTab(p, url);
+      if (tab.webSocketDebuggerUrl) {
+        const client = new CDPClient(tab.webSocketDebuggerUrl);
+        await client.waitReady();
+        await client.send("Page.enable");
+        await new Promise((resolve2) => {
+          const timer = setTimeout(() => resolve2(), 1e4);
+          client.on("Page.loadEventFired", () => {
+            clearTimeout(timer);
+            resolve2();
+          });
+        });
+        client.close();
+      }
+      updateActiveSession({ targetId: tab.id });
+      console.log(JSON.stringify({ id: tab.id, url: tab.url, port: p }, null, 2));
+      console.error(`
+New tab opened. Session context updated.`);
+      console.error(`Use --target ${tab.id.slice(0, 8)} if passing target explicitly.`);
+      break;
+    }
+    case "navigate": {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture navigate <url> [--har-out <path>] [--settle <ms>] [--har <id>]\n\nNavigate to URL and record HAR. Appends to session HAR if --har is set.\n\nExample: capture navigate "https://app.example.com/dashboard" --settle 3000'
+        );
+        process.exit(0);
+      }
+      const url = parsed.positional[0];
+      if (!url) {
+        console.error(
+          "Usage: capture navigate <url> [--har-out <path>] [--settle <ms>]"
+        );
+        process.exit(1);
+      }
+      const result = await navigateAndRecord({
+        port: parsed.port,
+        url,
+        targetId: parsed.target,
+        harOutPath: parsed.har ? void 0 : parsed.harOut,
+        settle: parsed.settle
+      });
+      if (parsed.har && result.har.log.entries.length > 0) {
+        appendToHarRecording(parsed.har, result.har.log.entries);
+        console.error(`  [har:${parsed.har}] +${result.har.log.entries.length} entries`);
+      }
+      console.log(
+        JSON.stringify(
+          {
+            entryCount: result.entryCount,
+            harPath: result.harPath,
+            tabUrl: result.tab.url,
+            timedOut: result.timedOut
+          },
+          null,
+          2
+        )
+      );
+      break;
+    }
+    case "screenshot": {
+      if (parsed.help) {
+        console.log(
+          "Usage: capture screenshot [--target <id>] [--out <path>] [--viewport <preset>] [--height <px>] [--full-page]\n\nCapture a screenshot of the targeted tab. Saves to --out or auto-generates a path.\n\nOptions:\n  --viewport <preset>  Viewport preset (default: desktop)\n                       desktop-wide  1920x1080\n                       desktop       1280x800\n                       tablet        768x1024\n                       mobile        390x844\n  --height <px>        Override viewport height (e.g. 1600)\n  --full-page          Capture the entire scrollable page"
+        );
+        process.exit(0);
+      }
+      const VIEWPORTS = {
+        "desktop-wide": { width: 1920, height: 1080 },
+        "desktop": { width: 1280, height: 800 },
+        "tablet": { width: 768, height: 1024 },
+        "mobile": { width: 390, height: 844 }
+      };
+      const viewportName = parsed.viewport ?? "desktop";
+      const viewport = VIEWPORTS[viewportName];
+      if (!viewport) {
+        console.error(`Unknown viewport "${viewportName}". Options: ${Object.keys(VIEWPORTS).join(", ")}`);
+        process.exit(1);
+      }
+      if (parsed.height) {
+        viewport.height = parsed.height;
+      }
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          const png = await captureScreenshot(client, viewport, { fullPage: parsed.fullPage });
+          const outPath = parsed.out ? parsed.out : nextStepPath("screenshot", "manual") ?? `/tmp/capture-screenshot-${Date.now()}.png`;
+          fs3.writeFileSync(outPath, png);
+          return { path: outPath, bytes: png.length };
+        },
+        { settle: 0 }
+      );
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case "click": {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture click "name" [--role button|link|...] [--no-screenshot]\n\nClick an element by its accessible name. Auto-captures a screenshot after clicking.'
+        );
+        process.exit(0);
+      }
+      const name = parsed.positional[0];
+      if (!name) {
+        console.error('Usage: capture click "name" [--role button|link|...] [--no-screenshot]');
+        process.exit(1);
+      }
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          const clickResult = await clickByName(client, name, parsed.role);
+          const screenshot = await autoScreenshot(client, "click", name, parsed.noScreenshot);
+          return { ...clickResult, screenshot };
+        },
+        { settle: 1e3 }
+      );
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case "type": {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture type "text" [--into "field name"] [--no-screenshot]\n\nType text into the focused element, or into a named field with --into.'
+        );
+        process.exit(0);
+      }
+      const text = parsed.positional[0];
+      if (!text) {
+        console.error('Usage: capture type "text" [--into "field name"] [--no-screenshot]');
+        process.exit(1);
+      }
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          let field = null;
+          if (parsed.into) {
+            await focusAndType(client, parsed.into, text, parsed.role);
+            field = parsed.into;
+          } else {
+            await typeText(client, text);
+          }
+          const label = field ?? text;
+          const screenshot = await autoScreenshot(client, "type", label, parsed.noScreenshot);
+          return { typed: text, field, screenshot };
+        },
+        { settle: 500 }
+      );
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case "a11y": {
+      if (parsed.help) {
+        console.log(
+          "Usage: capture a11y [--target <id>] [--json] [--interactive]\n\nGet the accessibility tree. Use --interactive for interactive elements only.\nUse --json for structured JSON output."
+        );
+        process.exit(0);
+      }
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          const tree = await getAccessibilityTree(client);
+          if (parsed.json) {
+            return tree;
+          }
+          const lines = flattenA11yTree(tree, {
+            interactive: parsed.interactive
+          });
+          return lines.join("\n");
+        },
+        { settle: 0 }
+      );
+      if (parsed.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(result);
+      }
+      if (!parsed.json) {
+        const lineCount = typeof result === "string" ? result.split("\n").filter(Boolean).length : 0;
+        if (lineCount === 0) {
+          console.error(
+            "\nNo elements found." + (parsed.interactive ? " Try without --interactive to see all nodes." : "") + '\n\nIf this page is part of your project, consider adding ARIA attributes:\n  - role="button|link|textbox" on interactive elements\n  - aria-label="..." on elements without visible text\n  - Semantic HTML (<button>, <input>, <nav>) provides roles automatically'
+          );
+        } else if (parsed.interactive && lineCount < 5) {
+          console.error(
+            `
+Only ${lineCount} interactive element${lineCount === 1 ? "" : "s"} found. If this seems low, the page may lack ARIA markup.
+Consider adding role and aria-label attributes to interactive elements in your frontend code.`
+          );
+        }
+      }
+      break;
+    }
+    case "har": {
+      if (parsed.help) {
+        console.log(
+          "Usage: capture har <create|read|delete>\n\n  create              Create a new HAR recording (returns id)\n  read <id>           Read accumulated HAR entries\n  delete <id>         Delete a HAR recording\n\nPass --har <id> to exec/navigate commands to append traffic to a recording."
+        );
+        process.exit(0);
+      }
+      const subcommand = args[1];
+      if (subcommand === "create") {
+        const { id, path: harPath } = createHarRecording();
+        console.log(JSON.stringify({ id, path: harPath }, null, 2));
+        console.error(
+          `
+Pass --har ${id} to subsequent commands to record traffic.`
+        );
+        break;
+      }
+      if (subcommand === "read") {
+        const id = args[2];
+        if (!id) {
+          console.error("Usage: capture har read <id>");
+          process.exit(1);
+        }
+        const har = readHarRecording(id);
+        if (!har) {
+          console.error(`No HAR recording found for id: ${id}`);
+          process.exit(1);
+        }
+        console.error(
+          `HAR: ${harFilePath(id)} (${har.log.entries.length} entries)`
+        );
+        console.log(JSON.stringify(har, null, 2));
+        break;
+      }
+      if (subcommand === "delete") {
+        const id = args[2];
+        if (!id) {
+          console.error("Usage: capture har delete <id>");
+          process.exit(1);
+        }
+        deleteHarRecording(id);
+        console.log(JSON.stringify({ deleted: true, id }, null, 2));
+        break;
+      }
+      console.error(
+        "Usage: capture har <create|read|delete>\n  create              Create a new HAR recording (returns id)\n  read <id>           Read accumulated HAR entries\n  delete <id>         Delete a HAR recording"
+      );
+      process.exit(1);
+      break;
+    }
+    case "network": {
+      if (parsed.help) {
+        console.log(
+          'Usage: capture network <offline|online> [--target <id>]\n\nToggle network connectivity for a tab. Use "offline" to simulate\nnetwork failure (kills WebSocket connections, blocks HTTP requests).\nUse "online" to restore connectivity.'
+        );
+        process.exit(0);
+      }
+      const mode = parsed.positional[0];
+      if (!mode || !["offline", "online"].includes(mode)) {
+        console.error("Usage: capture network <offline|online> [--target <id>]");
+        process.exit(1);
+      }
+      const offline = mode === "offline";
+      const result = await withConnection(
+        parsed,
+        async (client) => {
+          await client.send("Network.enable");
+          await client.send("Network.emulateNetworkConditions", {
+            offline,
+            latency: offline ? -1 : 0,
+            downloadThroughput: offline ? 0 : -1,
+            uploadThroughput: offline ? 0 : -1
+          });
+          return { network: mode, offline };
+        },
+        { settle: 0 }
+      );
+      console.log(JSON.stringify(result, null, 2));
+      if (offline) {
+        console.error("\nNetwork disabled. WebSocket connections will drop.");
+        console.error("Restore with: capture network online");
+      } else {
+        console.error("\nNetwork restored.");
+      }
+      break;
+    }
+    default:
+      console.log(`CDP \u2014 browser automation via exec, a11y interactions, and screenshots.
+
+Commands:
+  exec <code>         Execute JavaScript in a browser tab
+  exec --file <path>  Execute JS from file
+  detect              Detect CDP port (prioritizes default browser)
+  list                List all browser tabs
+  open <url>          Open URL in browser (returns tab ID)
+  reset-tab <url>     Abandon stuck tab, open fresh one (updates session)
+  screenshot          Capture screenshot
+  click "name"        Click element by accessible name
+  type "text"         Type text into focused element
+  a11y                Get accessibility tree
+  record              Passive HAR recording
+  navigate <url>      Navigate to URL and record HAR
+  network <offline|online>  Toggle network (simulate disconnect)
+  har create          Create a HAR recording (returns id)
+  har read <id>       Read accumulated HAR entries
+  har delete <id>     Delete a HAR recording
+
+Options:
+  --port <port>       Override CDP port
+  --target <tabId>    Target tab by exact ID (preferred, parallel-safe)
+  --new               Force new tab (open)
+  --record            Enable HAR recording (exec)
+  --har <id>          Append traffic to a HAR recording
+  --har-out <path>    HAR output path
+  --file <path>       Read JS from file (exec)
+  --duration <secs>   Recording duration (record, default: 10)
+  --settle <ms>       Settle time (navigate, default: 2000)
+  --out <path>        Output path (screenshot)
+  --viewport <preset> Viewport preset: desktop-wide|desktop|tablet|mobile (default: desktop)
+  --height <px>       Override viewport height (screenshot)
+  --full-page         Capture entire scrollable page (screenshot)
+  --json              JSON output (a11y)
+  --interactive       Interactive elements only (a11y)
+  --role <role>       ARIA role filter (click)
+  --into "field"      Target field by name (type)
+  --no-screenshot     Skip auto-screenshot (click, type)
+
+Console output (errors, warnings) is always captured and printed to stderr.
+
+Examples:
+  capture detect
+  capture list
+  capture open "https://app.example.com" --new
+  capture exec "document.title" --target <id>
+  capture exec "document.querySelector('.btn').click()" --target <id>
+  capture exec "fetch('/api/data').then(r=>r.json())" --target <id> --record
+  capture exec --file /tmp/scrape.js --target <id>
+  capture screenshot --target <id> --out /tmp/shot.png
+  capture a11y --target <id> --interactive
+  capture record --target <id> --duration 15
+  capture navigate "https://app.example.com/dashboard"
+  capture har create
+  capture exec "document.querySelector('form').submit()" --target <id> --har <id>
+  capture har read <id>
+`);
+  }
+}
+var SKIP_EXTENSIONS, SKIP_DOMAINS, MAX_BODY_SIZE, HARRecorder, ConsoleRecorder, INTERACTIVE_ROLES, BROWSER_PATTERNS, CDPClient, LOCK_DIR, LOCK_STALE_MS, LOCK_TIMEOUT_MS, LOCK_POLL_BASE_MS, heldLocks, cleanupRegistered, isMainModule;
+var init_cdp = __esm({
+  "src/cdp.ts"() {
+    init_har_manager();
+    init_session_context();
+    init_interact();
+    SKIP_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|eot|css|mp4|webm|mp3)(\?|$)/i;
+    SKIP_DOMAINS = /(google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|px\.ads|analytics|tracking|beacon|telemetry)/i;
+    MAX_BODY_SIZE = 256 * 1024;
+    HARRecorder = class {
+      constructor(client) {
+        this.client = client;
+      }
+      requests = /* @__PURE__ */ new Map();
+      responses = /* @__PURE__ */ new Map();
+      get responseCount() {
+        return this.responses.size;
+      }
+      async start() {
+        await this.client.send("Network.enable");
+        this.client.on("Network.requestWillBeSent", (params) => {
+          const p = params;
+          if (!shouldRecordRequest(p.request.url)) return;
+          this.requests.set(p.requestId, {
+            requestId: p.requestId,
+            url: p.request.url,
+            method: p.request.method,
+            headers: p.request.headers,
+            postData: p.request.postData,
+            timestamp: p.timestamp
+          });
+        });
+        this.client.on("Network.responseReceived", (params) => {
+          const p = params;
+          if (!this.requests.has(p.requestId)) return;
+          this.responses.set(p.requestId, {
+            requestId: p.requestId,
+            url: p.response.url,
+            status: p.response.status,
+            headers: p.response.headers,
+            timestamp: p.timestamp
+          });
+        });
+      }
+      buildHar() {
+        return {
+          log: {
+            entries: Array.from(this.responses.values()).map((resp) => {
+              const req = this.requests.get(resp.requestId);
+              return {
+                startedDateTime: new Date(resp.timestamp * 1e3).toISOString(),
+                request: {
+                  method: req?.method ?? "GET",
+                  url: resp.url,
+                  headers: Object.entries(req?.headers ?? {}).map(
+                    ([name, value]) => ({ name, value })
+                  ),
+                  postData: req?.postData ? { text: req.postData } : void 0
+                },
+                response: {
+                  status: resp.status,
+                  headers: Object.entries(resp.headers).map(([name, value]) => ({
+                    name,
+                    value
+                  })),
+                  content: { text: resp.body }
+                }
+              };
+            })
+          }
+        };
+      }
+      async finish() {
+        await Promise.allSettled(
+          Array.from(this.responses.entries()).map(async ([reqId, resp]) => {
+            const bodyResult = await this.client.send("Network.getResponseBody", {
+              requestId: reqId
+            }, 5e3);
+            const decoded = bodyResult.base64Encoded ? Buffer.from(bodyResult.body, "base64").toString() : bodyResult.body;
+            resp.body = decoded.length > MAX_BODY_SIZE ? decoded.slice(0, MAX_BODY_SIZE) + `
+[truncated: ${decoded.length} bytes]` : decoded;
+          })
+        );
+        return this.buildHar();
+      }
+      finishPartial() {
+        return this.buildHar();
+      }
+    };
+    ConsoleRecorder = class {
+      constructor(client) {
+        this.client = client;
+      }
+      entries = [];
+      async start() {
+        await this.client.send("Runtime.enable");
+        this.client.on("Runtime.consoleAPICalled", (params) => {
+          const p = params;
+          const text = p.args.map(
+            (a) => a.value !== void 0 ? String(a.value) : a.description ?? ""
+          ).join(" ");
+          this.entries.push({
+            level: p.type,
+            text,
+            timestamp: p.timestamp
+          });
+        });
+        this.client.on("Runtime.exceptionThrown", (params) => {
+          const p = params;
+          this.entries.push({
+            level: "error",
+            text: p.exceptionDetails.exception?.description ?? p.exceptionDetails.text ?? "Unknown exception",
+            timestamp: p.timestamp,
+            source: p.exceptionDetails.url ? `${p.exceptionDetails.url}:${p.exceptionDetails.lineNumber}` : void 0
+          });
+        });
+      }
+      finish() {
+        return [...this.entries];
+      }
+    };
+    INTERACTIVE_ROLES = /* @__PURE__ */ new Set([
+      "button",
+      "link",
+      "textbox",
+      "searchbox",
+      "combobox",
+      "checkbox",
+      "radio",
+      "menuitem",
+      "tab",
+      "switch",
+      "slider",
+      "spinbutton",
+      "option",
+      "menuitemcheckbox",
+      "menuitemradio"
+    ]);
+    BROWSER_PATTERNS = {
+      "company.thebrowser.browser": ["arc"],
+      "com.google.chrome": ["chrome", "google chrome"],
+      "com.brave.browser": ["brave"],
+      "com.microsoft.edgemac": ["edge", "microsoft edge"],
+      "org.chromium.chromium": ["chromium"]
+    };
+    CDPClient = class {
+      ws;
+      messageId = 0;
+      pendingRequests = /* @__PURE__ */ new Map();
+      pendingTimeouts = /* @__PURE__ */ new Map();
+      eventHandlers = /* @__PURE__ */ new Map();
+      ready;
+      constructor(wsUrl, connectTimeout = 5e3) {
+        this.ws = new WebSocket(wsUrl);
+        this.ready = new Promise((resolve2, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error(`WebSocket connection timeout (${connectTimeout}ms)`));
+          }, connectTimeout);
+          this.ws.on("open", () => {
+            clearTimeout(timeout);
+            resolve2();
+          });
+          this.ws.on("error", (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        });
+        this.ws.on("message", (data) => {
+          const msg = JSON.parse(data.toString());
+          if (msg.id !== void 0) {
+            const pending = this.pendingRequests.get(msg.id);
+            if (pending) {
+              this.pendingRequests.delete(msg.id);
+              const timer = this.pendingTimeouts.get(msg.id);
+              if (timer) {
+                clearTimeout(timer);
+                this.pendingTimeouts.delete(msg.id);
+              }
+              if (msg.error) {
+                pending.reject(new Error(msg.error.message));
+              } else {
+                pending.resolve(msg.result);
+              }
+            }
+          } else if (msg.method) {
+            const handlers = this.eventHandlers.get(msg.method);
+            handlers?.forEach((h) => h(msg.params));
+          }
+        });
+      }
+      async waitReady() {
+        await this.ready;
+      }
+      async send(method, params = {}, timeout = 6e4) {
+        await this.ready;
+        const id = ++this.messageId;
+        return new Promise((resolve2, reject) => {
+          this.pendingRequests.set(id, { resolve: resolve2, reject });
+          this.ws.send(JSON.stringify({ id, method, params }));
+          const timer = setTimeout(() => {
+            if (this.pendingRequests.has(id)) {
+              this.pendingRequests.delete(id);
+              this.pendingTimeouts.delete(id);
+              reject(new Error(`CDP request timeout (${timeout}ms): ${method}`));
+            }
+          }, timeout);
+          this.pendingTimeouts.set(id, timer);
+        });
+      }
+      on(event, handler) {
+        if (!this.eventHandlers.has(event)) {
+          this.eventHandlers.set(event, []);
+        }
+        this.eventHandlers.get(event).push(handler);
+      }
+      close() {
+        for (const timer of this.pendingTimeouts.values()) {
+          clearTimeout(timer);
+        }
+        this.pendingTimeouts.clear();
+        this.ws.close();
+      }
+    };
+    LOCK_DIR = os2.tmpdir();
+    LOCK_STALE_MS = 12e4;
+    LOCK_TIMEOUT_MS = 6e4;
+    LOCK_POLL_BASE_MS = 200;
+    heldLocks = /* @__PURE__ */ new Set();
+    cleanupRegistered = false;
+    isMainModule = process.argv[1]?.endsWith("cdp.ts") || process.argv[1]?.endsWith("cdp.mjs");
+    if (isMainModule) {
+      main().then(() => {
+        if (process.stdout.writableNeedDrain) {
+          process.stdout.once("drain", () => process.exit(0));
+        } else {
+          process.exit(0);
+        }
+      }).catch((err) => {
+        console.error(err.message);
+        process.exit(1);
+      });
+    }
+  }
+});
+
+// src/capture.ts
+init_har_manager();
+init_cdp();
+init_session_context();
+import * as fs4 from "fs";
+import * as path4 from "path";
+import * as os3 from "os";
+import { spawn } from "child_process";
+var CAPTURE_ROOT2 = path4.join(os3.tmpdir(), "capture-sessions");
+function sessionDir(id) {
+  return path4.join(CAPTURE_ROOT2, id);
+}
+function sessionMetaPath(id) {
+  return path4.join(sessionDir(id), ".session.json");
+}
+function readSession(id) {
+  const metaPath = sessionMetaPath(id);
+  if (!fs4.existsSync(metaPath)) {
+    throw new Error(`No capture session found: ${id}`);
+  }
+  return JSON.parse(fs4.readFileSync(metaPath, "utf-8"));
+}
+function generateId() {
+  return `cap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+async function start(args) {
+  let url = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--url" && args[i + 1]) {
+      url = args[++i];
+    }
+  }
+  const id = generateId();
+  const dir = sessionDir(id);
+  fs4.mkdirSync(path4.join(dir, "shots"), { recursive: true });
+  fs4.mkdirSync(path4.join(dir, "a11y"), { recursive: true });
+  let harId = null;
+  try {
+    const harResult = createHarRecording();
+    harId = harResult.id;
+  } catch (err) {
+    console.error(`Warning: could not start HAR recording: ${err instanceof Error ? err.message : err}`);
+  }
+  let targetId = null;
+  if (url) {
+    try {
+      const { detectCdpPort: detectCdpPort2, navigateAndWait: navigateAndWait2 } = await Promise.resolve().then(() => (init_cdp(), cdp_exports));
+      const port = await detectCdpPort2();
+      const tab = await navigateAndWait2(port, url);
+      targetId = tab.id;
+    } catch (err) {
+      console.error(`Warning: could not open tab: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  const session = {
+    id,
+    dir,
+    harId,
+    startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    url,
+    targetId,
+    stepCount: 0,
+    logPids: []
+  };
+  fs4.writeFileSync(sessionMetaPath(id), JSON.stringify(session, null, 2));
+  setActiveSession({
+    sessionId: id,
+    dir,
+    harId,
+    targetId,
+    stepCount: 0
+  });
+  const result = {
+    sessionId: id,
+    bundleDir: dir,
+    harId,
+    targetId,
+    shotsDir: path4.join(dir, "shots"),
+    a11yDir: path4.join(dir, "a11y")
+  };
+  console.log(JSON.stringify(result, null, 2));
+  console.error(`
+Capture session started: ${id}`);
+  if (targetId) {
+    console.error(`Tab opened \u2014 session context active. No need to pass --target or --har.`);
+  }
+  console.error(`
+When done: capture session stop ${id}`);
+}
+function logCommand(args) {
+  const sourcePath = args[0];
+  if (!sourcePath) {
+    console.error("Usage: capture log <path> [--name label] [--session <id>]");
+    process.exit(1);
+  }
+  const resolved = path4.resolve(sourcePath);
+  if (!fs4.existsSync(resolved)) {
+    throw new Error(`Log file not found: ${resolved}`);
+  }
+  let name = null;
+  let sessionId = null;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === "--name" && args[i + 1]) name = args[++i];
+    if (args[i] === "--session" && args[i + 1]) sessionId = args[++i];
+  }
+  if (!sessionId) {
+    const active = getActiveSession();
+    if (!active) {
+      throw new Error("No active capture session. Start one or pass --session <id>.");
+    }
+    sessionId = active.sessionId;
+  }
+  const session = readSession(sessionId);
+  name = name ?? path4.basename(resolved, path4.extname(resolved));
+  const logsDir = path4.join(session.dir, "logs");
+  fs4.mkdirSync(logsDir, { recursive: true });
+  const destPath = path4.join(logsDir, `${name}.log`);
+  const outFd = fs4.openSync(destPath, "a");
+  const child = spawn(
+    "sh",
+    ["-c", `tail -f "${resolved}" | perl -MPOSIX -ne 'print strftime("%Y-%m-%dT%H:%M:%SZ",gmtime())." ".$_'`],
+    { detached: true, stdio: ["ignore", outFd, "ignore"] }
+  );
+  child.unref();
+  fs4.closeSync(outFd);
+  const pid = child.pid;
+  session.logPids.push({ pid, name, sourcePath: resolved });
+  fs4.writeFileSync(sessionMetaPath(session.id), JSON.stringify(session, null, 2));
+  console.log(JSON.stringify({ name, sourcePath: resolved, destPath, pid }, null, 2));
+}
+async function stop(args) {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: capture session stop <session-id>");
+    process.exit(1);
+  }
+  const session = readSession(id);
+  const stoppedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const startMs = new Date(session.startedAt).getTime();
+  const duration = Date.now() - startMs;
+  for (const lp of session.logPids ?? []) {
+    try {
+      process.kill(-lp.pid, "SIGTERM");
+    } catch {
+    }
+  }
+  if (session.logPids?.length) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const shotsDir = path4.join(session.dir, "shots");
+  const screenshots = fs4.existsSync(shotsDir) ? fs4.readdirSync(shotsDir).filter((f) => f.endsWith(".png") || f.endsWith(".jpg")).map((f) => ({ name: f, path: path4.join(shotsDir, f) })) : [];
+  const a11yDir = path4.join(session.dir, "a11y");
+  const a11y = fs4.existsSync(a11yDir) ? fs4.readdirSync(a11yDir).filter((f) => f.endsWith(".json") || f.endsWith(".txt")).map((f) => ({ name: f, path: path4.join(a11yDir, f) })) : [];
+  let har = null;
+  if (session.harId) {
+    try {
+      const harData = readHarRecording(session.harId);
+      if (harData) {
+        const harPath = path4.join(session.dir, "har.json");
+        fs4.writeFileSync(harPath, JSON.stringify(harData, null, 2));
+        har = { id: session.harId, path: harPath, entryCount: harData.log.entries.length };
+        try {
+          deleteHarRecording(session.harId);
+        } catch {
+        }
+      }
+    } catch (err) {
+      console.error(`Warning: could not read HAR: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  const logsDir = path4.join(session.dir, "logs");
+  const logs = fs4.existsSync(logsDir) ? fs4.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => {
+    const filePath = path4.join(logsDir, f);
+    const content = fs4.readFileSync(filePath, "utf-8");
+    const lines = content ? content.split("\n").filter(Boolean).length : 0;
+    return { name: f, path: filePath, lines };
+  }) : [];
+  const knownDirs = /* @__PURE__ */ new Set(["shots", "a11y", "logs"]);
+  const knownFiles = /* @__PURE__ */ new Set([".session.json", "har.json", "bundle.json"]);
+  const other = fs4.readdirSync(session.dir).filter((f) => !knownDirs.has(f) && !knownFiles.has(f)).map((f) => ({ name: f, path: path4.join(session.dir, f) }));
+  clearActiveSession();
+  const manifest = {
+    id: session.id,
+    startedAt: session.startedAt,
+    stoppedAt,
+    duration,
+    url: session.url,
+    screenshots,
+    har,
+    a11y,
+    logs,
+    other
+  };
+  const bundlePath = path4.join(session.dir, "bundle.json");
+  fs4.writeFileSync(bundlePath, JSON.stringify(manifest, null, 2));
+  console.log(JSON.stringify({
+    bundlePath,
+    summary: {
+      duration,
+      screenshots: screenshots.length,
+      harEntries: har?.entryCount ?? 0,
+      a11ySnapshots: a11y.length,
+      logFiles: logs.length,
+      otherFiles: other.length
+    }
+  }, null, 2));
+  console.error(`
+Bundle written: ${bundlePath}`);
+  console.error(`Read it: capture session view ${id}`);
+}
+function list() {
+  if (!fs4.existsSync(CAPTURE_ROOT2)) {
+    console.log("[]");
+    return;
+  }
+  const sessions = fs4.readdirSync(CAPTURE_ROOT2).filter((d) => fs4.existsSync(sessionMetaPath(d))).map((d) => {
+    const session = readSession(d);
+    const hasBundled = fs4.existsSync(path4.join(session.dir, "bundle.json"));
+    return { id: session.id, startedAt: session.startedAt, url: session.url, status: hasBundled ? "stopped" : "active" };
+  });
+  console.log(JSON.stringify(sessions, null, 2));
+}
+function view(args) {
+  const id = args[0];
+  if (!id) {
+    console.error("Usage: capture session view <session-id> [--filter screenshots|har|a11y]");
+    process.exit(1);
+  }
+  const session = readSession(id);
+  const bundlePath = path4.join(session.dir, "bundle.json");
+  if (!fs4.existsSync(bundlePath)) {
+    console.error(`Session ${id} hasn't been stopped yet. Run: capture session stop ${id}`);
+    process.exit(1);
+  }
+  const manifest = JSON.parse(fs4.readFileSync(bundlePath, "utf-8"));
+  const filter = args.find((_, i) => args[i - 1] === "--filter");
+  if (filter) {
+    const section = manifest[filter];
+    console.log(JSON.stringify(section, null, 2));
+  } else {
+    console.log(JSON.stringify(manifest, null, 2));
+  }
+}
+async function sessionMain(args) {
+  const [subcommand, ...rest] = args;
+  switch (subcommand) {
+    case "start":
+      return start(rest);
+    case "stop":
+      return stop(rest);
+    case "list":
+      return list();
+    case "view":
+      return view(rest);
+    default:
+      console.log(`capture session \u2014 manage capture sessions
+
+Commands:
+  start [--url <url>]                Start a capture session
+  stop <session-id>                  Finalize and bundle all artifacts
+  list                               List active and stopped sessions
+  view <id> [--filter section]       View bundle manifest
+  log <path> [--name label]          Tail a log file into the session
+
+Workflow:
+  1. capture session start --url http://localhost:3000
+  2. Use CDP commands directly:
+       capture screenshot --url localhost --out $CAPTURE_DIR/shots/homepage.png --har $HAR_ID
+       capture exec "document.querySelector('.btn').click()" --url localhost --har $HAR_ID
+       capture a11y --url localhost --json > $CAPTURE_DIR/a11y/after-login.json
+  3. capture session stop <session-id>
+  4. capture session view <session-id>`);
+  }
+}
+async function main2() {
+  const [command, ...args] = process.argv.slice(2);
+  switch (command) {
+    case "session":
+      return sessionMain(args);
+    case "log":
+      return logCommand(args);
+    // CDP commands — delegate to cdp.ts
+    case "detect":
+    case "exec":
+    case "open":
+    case "reset-tab":
+    case "screenshot":
+    case "click":
+    case "type":
+    case "a11y":
+    case "record":
+    case "navigate":
+    case "har":
+    case "network":
+    case "list":
+      return main();
+    default:
+      console.log(`Capture \u2014 session management and CDP browser automation
+
+Session commands:
+  session start [--url <url>]        Start a capture session
+  session stop <session-id>          Finalize and bundle all artifacts
+  session list                       List active and stopped sessions
+  session view <id> [--filter ...]   View bundle manifest
+  log <path> [--name label]          Tail a log file into the session
+
+CDP commands:
+  detect                             Detect CDP port
+  exec <code>                        Execute JS in a browser tab
+  exec --file <path>                 Execute JS from file
+  list                               List all browser tabs
+  open <url>                         Open URL in browser
+  reset-tab <url>                    Abandon stuck tab, open fresh one
+  screenshot                         Capture screenshot
+  click "name"                       Click element by accessible name
+  type "text"                        Type text into focused element
+  a11y                               Get accessibility tree
+  record                             Passive HAR recording
+  navigate <url>                     Navigate to URL and record HAR
+  network <offline|online>           Toggle network (simulate disconnect)
+  har create|read|delete             Manage HAR recordings
+
+Options (CDP):
+  --port <port>       Override CDP port
+  --target <tabId>    Target tab by exact ID (preferred, parallel-safe)
+  --url <pattern>     Target tab by URL pattern (fuzzy match)
+  --har <id>          Append traffic to a HAR recording
+  --out <path>        Output path (screenshot)
+  --json              JSON output (a11y)
+  --interactive       Interactive elements only (a11y)
+  --role <role>       ARIA role filter (click)
+  --into "field"      Target field by name (type)
+  --no-screenshot     Skip auto-screenshot (click, type)
+
+Examples:
+  capture session start --url http://localhost:3000
+  capture session stop <session-id>
+  capture detect
+  capture list
+  capture exec "document.title" --url example
+  capture screenshot --url example --out /tmp/shot.png
+  capture a11y --url example --interactive`);
+  }
+}
+main2().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});

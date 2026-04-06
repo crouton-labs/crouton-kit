@@ -20,7 +20,43 @@ cat file.md | termrender       Render from stdin
 
 ## Directives
 
-Every directive opens with `:::name{attrs}` and closes with `:::` (except `:::divider` which is self-closing). Directives nest arbitrarily — every opener needs a matching `:::`.
+Directives open with 3+ colons (`:::name{attrs}`, `::::name{attrs}`, etc.) and close with a matching colon count. `:::divider` is self-closing. For nesting, use more colons on outer directives so closers are unambiguous:
+
+```
+::::columns
+:::col{width="50%"}
+Left content.
+:::
+:::col{width="50%"}
+Right content.
+:::
+::::
+```
+
+### Backtick Fence Directives
+
+Directives can also use backtick fence syntax (MyST standard):
+
+````
+```{panel}
+:title: Hello
+Content here.
+```
+````
+
+Option lines (`:key: value`) set attrs — they go between the opening fence and the body. Inline attrs (`{title="Hello"}`) take precedence over option lines.
+
+### Option Lines
+
+Both colon and backtick directives support option lines at the top of the body:
+
+```
+:::panel
+:title: My Panel
+:color: blue
+Content here.
+:::
+```
 
 ### Panel — bordered box
 ```
@@ -31,14 +67,14 @@ Content here.
 
 ### Columns — side-by-side layout
 ```
-:::columns
+::::columns
 :::col{width="50%"}
 Left content.
 :::
 :::col{width="50%"}
 Right content.
 :::
-:::
+::::
 ```
 
 ### Tree — hierarchical view
@@ -167,7 +203,7 @@ graph TD
     B -->|invalid| D[401 rejected]
 ```
 
-:::columns
+::::columns
 :::col{width="50%"}
 :::panel{title="Auth Middleware — src/middleware/auth.ts" color="blue"}
 - Validates JWT signature
@@ -182,7 +218,7 @@ graph TD
 - Writes to Postgres
 :::
 :::
-:::
+::::
 
 :::callout{type="info"}
 Auth middleware rejects before handler runs — no partial execution on invalid tokens.

@@ -313,6 +313,7 @@ async function processRepo(repoCwd, sessionId, processingCache) {
   }
 
   const directoryFiles = new Map();
+  const directoryDeletedFiles = new Map();
   const relativeDirLookup = new Map();
   let skippedGitIgnored = 0;
   let unchangedSinceLastRun = 0;
@@ -356,6 +357,14 @@ async function processRepo(repoCwd, sessionId, processingCache) {
     }
 
     directoryFiles.get(fileDir).push({ file: cacheKey, signature });
+
+    // Track deleted files separately so prompts can request stale content removal
+    if (signature.deleted) {
+      if (!directoryDeletedFiles.has(fileDir)) {
+        directoryDeletedFiles.set(fileDir, []);
+      }
+      directoryDeletedFiles.get(fileDir).push(basename(file));
+    }
   }
 
   if (directoryFiles.size === 0) {
@@ -407,6 +416,8 @@ async function processRepo(repoCwd, sessionId, processingCache) {
       ? readFileSync(customGuidancePath, 'utf-8')
       : null;
 
+    const deletedFilesInDir = directoryDeletedFiles.get(fileDir) || [];
+
     directoriesToProcess.push({
       relativePath,
       claudeMdPath,
@@ -418,6 +429,7 @@ async function processRepo(repoCwd, sessionId, processingCache) {
       targetLines,
       claudeMdHierarchy,
       changedFilesInDir,
+      deletedFilesInDir,
       filesInDir,
       customGuidance
     });
@@ -451,6 +463,7 @@ async function processRepo(repoCwd, sessionId, processingCache) {
     targetLines,
     claudeMdHierarchy,
     changedFilesInDir,
+    deletedFilesInDir,
     filesInDir,
     customGuidance
   } of directoriesToProcess) {
@@ -468,65 +481,112 @@ async function processRepo(repoCwd, sessionId, processingCache) {
     }
 
     const systemPrompt = isRoot
-      ? `Create or update the root CLAUDE.md. Guardrails and pointers, not a manual.
+      ? `You are a senior engineer writing a root CLAUDE.md — the persistent context file Claude Code loads every session. Every line competes for context window space, so each must prevent a concrete mistake.
 
-## Prioritize
-1. Constraints and gotchas — what breaks if ignored
-2. Key commands — build, test, lint (80% cases)
-3. Architecture — how components relate, 2-3 sentences max
-4. Conventions that differ from defaults
+Read the changed files in this directory. Then write or update the CLAUDE.md. Actively remove stale content — references to deleted files, renamed functions, or patterns that no longer exist. Stale documentation misleads worse than missing documentation.
+
+## What to include (in priority order)
+1. Build, test, lint commands for the 80% case
+2. Constraints and gotchas — what breaks silently if ignored
+3. Architecture — how layers connect, 2-3 sentences max
+4. Conventions that differ from language/framework defaults
+
+## Quality test for every line
+Ask: "Would removing this cause Claude to make a mistake?" If no, cut it.
+
+## Style
+- Short declarative bullets, not paragraphs
+- Pair every prohibition with the correct alternative
+- Reference other docs with *when/why* to read them, not just that they exist
+- Subdirectory CLAUDE.md files handle layer-specific detail — keep the root focused on project-wide concerns
+
+<example>
+<input>A Next.js app with Prisma ORM, pnpm workspaces</input>
+<output>
+# Project
+
+pnpm monorepo. Next.js frontend in \`apps/web/\`, shared packages in \`packages/\`.
+
+## Commands
+\`\`\`bash
+pnpm dev          # start all workspaces
+pnpm test         # vitest across all packages
+pnpm db:migrate   # prisma migrate dev (requires DATABASE_URL in .env.local)
+\`\`\`
 
 ## Constraints
-- Never "Never X" without the alternative
-- Don't list obvious things (language, framework) unless there's a gotcha
-- Reference other docs with *when/why* to read them
-- Short declarative bullets > paragraphs
+- DB schema changes: edit \`prisma/schema.prisma\`, then \`pnpm db:migrate\` — never hand-edit migration SQL
+- Import from \`@repo/ui\` in apps, never relative paths into \`packages/ui/src/\`
+- \`NEXT_PUBLIC_\` prefix required for any env var used client-side — omitting it silently returns \`undefined\`
+</output>
+</example>
 
 ## Output
-Write tool only, no explanatory text.`
-      : `Create or update a subdirectory CLAUDE.md. Only document non-obvious, codebase-specific information.
+Use the Write tool to create/update, or \`rm\` to delete a fully stale CLAUDE.md. Produce no explanatory text.`
+      : `You are a senior engineer writing a subdirectory CLAUDE.md — loaded on demand when Claude reads files in this directory. Every line competes for context window space, so each must prevent a concrete mistake.
 
-## Good content
-- Non-obvious behavior (race guards, fallback chains, state machines, execution paths)
-- Cross-module relationships not apparent from file names
-- Constraints that cause bugs if violated (timeouts, ordering, idempotency)
+Read the changed files in this directory to understand what's non-obvious. Then write or update the CLAUDE.md, or do nothing if there's nothing worth documenting. Actively remove stale content — references to deleted files, renamed functions, or patterns that no longer exist. Stale documentation misleads worse than missing documentation. If all content is stale, delete the CLAUDE.md entirely.
 
-## Bad content — write NOTHING instead
-- Generic framework guidance ("use @Cron decorator", "handle errors gracefully")
-- Restating what's obvious from directory/file names
-- Repeating parent CLAUDE.md content
-- Generic best practices ("use dependency injection", "write tests")
+## Include only
+- Silent failure modes: "X silently breaks Y" with what to do instead
+- Ordering constraints: "call A before B or C is permanently lost"
+- Cross-module dependencies not discoverable from a single file
+- Semantic traps: misleading names, asymmetric behavior, types that look similar but differ
 
-## Constraints
-- Never "Never X" without the alternative
-- Every line must earn its place — cut anything a developer would say "obviously" to
-- Reference other docs with *when/why* to read them
+## Exclude — write nothing rather than include these
+- Anything discoverable by reading the source files or type definitions
+- Framework/language conventions Claude already knows
+- Content already covered by a parent CLAUDE.md
+- Per-function API documentation (the code is the authority)
+
+## Quality test for every line
+Ask: "Would removing this cause Claude to make a mistake?" If no, cut it.
+
+## Style
+- Terse bullets, not paragraphs — prefer "X breaks Y" over explaining how X works
+- Pair every prohibition with the correct alternative
+- Group by topic (e.g., "State", "Rendering"), not by filename
+
+<example>
+<input>A directory with React components using a custom render pipeline</input>
+<output>
+# components/pipeline
+
+## Render constraints
+- \`useLayoutEffect\` required (not \`useEffect\`) for measurement hooks — \`useEffect\` causes visible frame flicker on mount
+- \`PipelineContext.flush()\` must be called after batch updates — individual \`setState\` calls are deferred until flush
+- \`ref\` callbacks fire before \`onMount\` — accessing \`ref.current\` inside \`onMount\` is safe; accessing it in the render body is not
+</output>
+</example>
 
 ## Output
-Write tool if worth documenting, otherwise output NOTHING.`;
+Use the Write tool if worth documenting. Use \`rm\` to delete a fully stale CLAUDE.md. Produce no output if no changes needed.`;
+
+    const deletionContext = deletedFilesInDir.length > 0
+      ? `\nDeleted files: ${deletedFilesInDir.join(', ')}\nIMPORTANT: Remove any CLAUDE.md content that references deleted files, functions, or patterns that no longer exist. Stale documentation is worse than no documentation.\n`
+      : '';
 
     const userPrompt = hasClaudeMd
-      ? `Directory: ${relativePath}
-Changed files: ${changedFilesInDir.join(', ')}
-Target length: ${targetLines} lines
+      ? `Directory: \`${relativePath}\`
+Changed files: ${changedFilesInDir.join(', ')}${deletionContext}
+Target length: ${targetLines} lines (current: ${existingClaudeMd.split('\n').length} lines — trim if over target)
 
-Current CLAUDE.md (${existingClaudeMd.split('\n').length} lines):
-\`\`\`
+<current_claude_md>
 ${existingClaudeMd}
-\`\`\`
+</current_claude_md>
 ${hierarchyContext}${customGuidanceContext}
-Contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
+Directory contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
 
-Update ${claudeMdPath} if the current content is generic padding or missing important patterns. Do nothing if already good.`
-      : `Directory: ${relativePath}
-Changed files: ${changedFilesInDir.join(', ')}
+Read the changed files, then update \`${claudeMdPath}\` if the current content has generic padding, references deleted/renamed code, is missing important non-obvious patterns from the changed files, or exceeds the target length. Do nothing if already good.`
+      : `Directory: \`${relativePath}\`
+Changed files: ${changedFilesInDir.join(', ')}${deletionContext}
 Target length: ${targetLines} lines
 
-No CLAUDE.md exists.
+No CLAUDE.md exists yet.
 ${hierarchyContext}${customGuidanceContext}
-Contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
+Directory contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
 
-Create ${claudeMdPath} if there's non-obvious behavior worth documenting. Do nothing otherwise.`;
+Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious patterns, constraints, or gotchas worth documenting. Do nothing otherwise.`;
 
     try {
       const result = query({
@@ -535,7 +595,7 @@ Create ${claudeMdPath} if there's non-obvious behavior worth documenting. Do not
         options: {
           systemPrompt,
           model: "claude-sonnet-4-6",
-          allowedTools: ["Read", "Glob", "Grep", "Write"],
+          allowedTools: ["Read", "Glob", "Grep", "Write", "Bash(rm:*)"],
           permissionMode: "bypassPermissions",
           hooks: {},
           pathToClaudeCodeExecutable: "/opt/homebrew/bin/claude"

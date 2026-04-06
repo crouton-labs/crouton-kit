@@ -6,7 +6,7 @@
     "ai": "./bin/ai"
   },
   "scripts": {
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=bin/ai --banner:js='#!/usr/bin/env node' --external:@r-cli/sdk --external:zod",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=bin/ai --banner:js='#!/usr/bin/env node'",
     "dev": "npm run build && node bin/ai"
   },
   "dependencies": {

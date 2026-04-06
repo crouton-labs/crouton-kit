@@ -1,12 +1,12 @@
 {
   "name": "@crouton-kit/capture",
   "version": "1.0.0",
-  "type": "module",
+
   "bin": {
     "capture": "./bin/capture"
   },
   "scripts": {
-    "build": "esbuild src/capture.ts --bundle --platform=node --format=esm --outfile=bin/capture '--banner:js=#!/usr/bin/env node' --packages=external && chmod +x bin/capture"
+    "build": "esbuild src/capture.ts --bundle --platform=node --format=cjs --outfile=bin/capture '--banner:js=#!/usr/bin/env node' && chmod +x bin/capture"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",

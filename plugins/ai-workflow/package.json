@@ -6,7 +6,7 @@
     "ai-workflow": "./bin/ai-workflow"
   },
   "scripts": {
-    "build": "node -e \"require('esbuild').buildSync({entryPoints:['src/cli.ts'],bundle:true,platform:'node',format:'esm',outfile:'bin/ai-workflow',banner:{js:'#!/usr/bin/env node'},packages:'external'})\""
+    "build": "node -e \"require('esbuild').buildSync({entryPoints:['src/cli.ts'],bundle:true,platform:'node',format:'esm',outfile:'bin/ai-workflow',banner:{js:'#!/usr/bin/env node'}})\""
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

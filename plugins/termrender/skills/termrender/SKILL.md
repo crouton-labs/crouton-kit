@@ -1,6 +1,6 @@
 ---
 name: termrender
-description: Rich terminal rendering of directive-flavored markdown. Panels, trees, columns, callouts, mermaid diagrams, and syntax-highlighted code — rendered as ANSI output or displayed in a tmux side pane. Use when producing visual output, diagrams, or structured terminal displays.
+description: Rich terminal rendering of directive-flavored markdown. Panels, trees, columns, callouts, mermaid diagrams, syntax-highlighted code, diffs, charts, KPI tiles, timelines, tasklists, and inline badges — rendered as ANSI output or displayed in a tmux side pane. Use when producing visual output, diagrams, or structured terminal displays.
 allowed-tools: Bash(termrender:*), Read, Write
 ---
 
@@ -20,7 +20,11 @@ cat file.md | termrender       Render from stdin
 
 ## Directives
 
-Directives open with 3+ colons (`:::name{attrs}`, `::::name{attrs}`, etc.) and close with a matching colon count. `:::divider` is self-closing. For nesting, use more colons on outer directives so closers are unambiguous:
+Directives open with 3+ colons (`:::name{attrs}`, `::::name{attrs}`, etc.) and close with a matching colon count. `:::divider`, `:::progress`, and `:::gauge` are self-closing at top level (no body, no closer needed); every other directive needs an explicit closer.
+
+### Nesting
+
+**Rule:** outer fences must use strictly more colons than the inner fences they wrap. The parser pairs openers and closers by colon count — a closer with a different count is treated as body content and re-parsed recursively. This matches MyST, Pandoc fenced divs, and markdown-it-container conventions.
 
 ```
 ::::columns
@@ -32,6 +36,10 @@ Right content.
 :::
 ::::
 ```
+
+For 3 levels use `:::::` → `::::` → `:::`. The extra colons make it visually clear which closer matches which opener and let the parser fail fast on mismatches.
+
+**Self-closing caveat:** `divider`, `progress`, and `gauge` are only self-closing at the *top level*. When nested inside another directive, they still need an explicit closer.
 
 ### Backtick Fence Directives
 
@@ -117,6 +125,72 @@ def hello():
 :::divider{label="Section Break"}
 ```
 
+### Diff — colored unified diff
+```
+:::diff{title="auth.py"}
+- old_token = jwt.encode(payload, key)
++ new_token = jwt.encode(payload, key, algorithm="HS256")
+  return new_token
+:::
+```
+Lines starting with `+` render green, `-` red, `@` (hunk headers) magenta. Other lines are dim. The `title` attr is optional and defaults to `diff`.
+
+### Bar — multi-bar horizontal chart
+```
+:::bar{title="requests/sec" color="cyan"}
+api-gateway: 12400
+auth: 8200
+cache: 5100
+:::
+```
+Body is one `label: value` per line (also accepts `label | value unit`). Bar widths scale to the largest value; sub-cell precision uses Unicode eighths blocks. Optional `title` and `color` attrs.
+
+### Progress — single-line progress bar (self-closing)
+```
+:::progress{value=70 max=100 label="Build"}
+```
+Color auto-selected by ratio (red < 50% < cyan < 99% < green) unless `color=` is set. Renders as one line.
+
+### Gauge — three-line meter (self-closing)
+```
+:::gauge{value=88 max=100 label="Memory" unit="%"}
+```
+Three lines: label, full-width bar, numeric readout. Color auto-selected by load (green < 70% < yellow < 90% < red). Use for resource utilization where the threshold matters.
+
+### Stat — KPI tile
+```
+:::stat{label="p99 latency" value="34ms" delta="-12%"}
+:::
+```
+Bordered tile with label, large centered value, and trend arrow + delta. `delta` sign auto-picks ▲ (green) or ▼ (red); override with `trend="up|down|flat"`. Optional body becomes a caption below the delta. Compose multiple stats inside `:::columns` for dashboards.
+
+### Timeline — vertical event timeline
+```
+:::timeline{title="Release history" color="cyan"}
+- 2024-01: v1.0 launched
+- 2024-06: v2.0 redesign
+- 2025-03: v3.0 mobile
+:::
+```
+Body is `- date: event` per line (`|` also works as the separator). Renders dates right-aligned with bullet markers and `│` connectors between entries.
+
+### Tasklist — checkbox list
+```
+:::tasklist
+- [x] write parser
+- [x] write renderer
+- [ ] write tests
+- [!] in progress
+:::
+```
+Renders ☑ / ☐ / ◐ checkboxes. The `:::tasklist` directive forces tasklist styling on the inner list and treats unmarked items as unchecked. Plain markdown lists with at least one `[x]`/`[ ]`/`[!]` marker are auto-promoted to tasklists — the directive is only needed when you want every item to render as an unchecked todo without writing `[ ]` on each line.
+
+### Inline badges
+```
+Status: :badge[stable]{color=green} :badge[v3.2.0]{color=blue}
+```
+Inline pill rendered with colored fg + dim bg, usable inside any paragraph, list item, table cell, or stat caption. Colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`. Defaults to `blue`.
+
 ### Mermaid — ASCII diagrams
 ````
 ```mermaid
@@ -175,8 +249,10 @@ All GFM markdown works inside directives: headings, **bold**, *italic*, `code`, 
 
 ## Colors
 
-Available for `panel` and `tree` color attrs:
+Available for `panel`, `tree`, `bar`, `progress`, `gauge`, `timeline`, and `stat` color attrs:
 `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `gray`
+
+Inline badges support `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`.
 
 ## Rendering to tmux
 
@@ -184,52 +260,75 @@ Available for `panel` and `tree` color attrs:
 
 Write to a temp file first, then render. Validate with `--check` if the document uses complex nesting.
 
+## Picking the right component
+
+| Goal | Use |
+|------|-----|
+| Show code changes | `:::diff` |
+| Compare quantities across categories | `:::bar` |
+| Show task or build completion | `:::progress` |
+| Show resource utilization vs threshold | `:::gauge` |
+| Headline metric on a dashboard | `:::stat` (compose in `:::columns`) |
+| Chronology / changelog / postmortem | `:::timeline` |
+| Todo list, plan checkboxes | `:::tasklist` or plain `- [x]`/`- [ ]` |
+| Inline status tag inside text | `:badge[...]{color=...}` |
+| Bordered grouping with title | `:::panel` |
+| Status note (info/warn/error/success) | `:::callout` |
+| Side-by-side layout | `:::columns` + `:::col` |
+| File / directory hierarchy | `:::tree` |
+| Architecture or flow diagram | mermaid (3–6 nodes — see Mermaid Best Practices) |
+
 ## Complete Example
 
 A well-structured termrender document combines multiple directives to tell a visual story:
 
 ```
-# API Request Flow
-
-:::panel{title="Client — src/client.ts:42" color="green"}
-Sends authenticated requests via `fetchWithAuth()`.
-Attaches JWT from session store.
-:::
-
-```mermaid
-graph TD
-    A[Client sends POST /api/data] --> B{Auth middleware<br/>validates JWT}
-    B -->|valid| C[Handler: parse, validate, write]
-    B -->|invalid| D[401 rejected]
-```
+# Deploy report :badge[v3.2.0]{color=blue} :badge[stable]{color=green}
 
 ::::columns
-:::col{width="50%"}
-:::panel{title="Auth Middleware — src/middleware/auth.ts" color="blue"}
-- Validates JWT signature
-- Checks token expiry
-- Attaches `req.user`
+:::col{width="33%"}
+:::stat{label="p99 latency" value="34ms" delta="-12%"}
 :::
 :::
-:::col{width="50%"}
-:::panel{title="Data Handler — src/handlers/data.ts" color="blue"}
-- Parses request body
-- Validates with Zod schema
-- Writes to Postgres
+:::col{width="33%"}
+:::stat{label="error rate" value="0.02%" delta="+5%"}
+:::
+:::
+:::col{width="33%"}
+:::stat{label="throughput" value="12.4k" delta="+8%"}
 :::
 :::
 ::::
 
-:::callout{type="info"}
-Auth middleware rejects before handler runs — no partial execution on invalid tokens.
+:::bar{title="requests/sec by service"}
+api-gateway: 12400
+auth: 8200
+cache: 5100
 :::
 
-:::panel{title="Tech Stack" color="gray"}
-| Layer | Technology |
-|-------|-----------|
-| Runtime | Node 20 + Express |
-| Auth | JWT (RS256) |
-| Validation | Zod |
-| Database | PostgreSQL 16 |
+:::gauge{value=88 max=100 label="Memory" unit="%"}
+
+:::diff{title="auth.py"}
+- old_token = jwt.encode(payload, key)
++ new_token = jwt.encode(payload, key, algorithm="HS256")
+  return new_token
+:::
+
+:::callout{type="success"}
+6 of 7 services healthy. scheduler at 83% memory — GC tuning shipping next release.
+:::
+
+:::tasklist
+- [x] migrate auth middleware
+- [x] update integration tests
+- [ ] update runbook
+- [!] coordinate with mobile team
+:::
+
+:::timeline{title="Release history"}
+- 2024-01: v1.0 launched
+- 2024-06: v2.0 redesign
+- 2025-03: v3.0 mobile
+- 2026-04: v4.0 LLM SDK
 :::
 ```

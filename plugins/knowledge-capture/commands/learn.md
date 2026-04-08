@@ -4,7 +4,7 @@ argument-hint: <focus-of-learning> <output-file>
 disable-model-invocation: true
 ---
 
-Based off this conversation, please extract the key takeaways relevant to $1. Update $2 with what you've learned.
+Based off this conversation, please extract the key takeaways relevant to $0. Update $1 with what you've learned.
 
 When saving the document, do not include information unless it represents specific knowledge unique to this project and the user's preferences.
 

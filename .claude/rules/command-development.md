@@ -6,6 +6,8 @@ paths:
 
 # Slash Command Development Reference
 
+**Commands and skills are the same thing.** `.claude/commands/foo.md` and `.claude/skills/foo/SKILL.md` both create `/foo` with identical frontmatter. Existing commands keep working; use skills when you need bundled scripts, reference files, or per-skill hooks.
+
 ## File Structure
 
 | Location | Scope |
@@ -28,22 +30,29 @@ description: Brief description (REQUIRED for Skill tool and /help)
 |-------|---------|---------|
 | `allowed-tools` | Scope permissions | `Bash(git:*), Read` |
 | `argument-hint` | Document arguments | `[pr-number] [priority]` |
-| `model` | Override model | `claude-3-5-haiku-20241022` |
-| `disable-model-invocation` | Prevent autonomous use | `true` |
+| `model` | Override model | `claude-haiku-4-5-20251001` |
+| `effort` | Effort level override | `low`, `medium`, `high`, `max` |
+| `disable-model-invocation` | User-only invocation | `true` |
+| `user-invocable` | Agent-only (`false` hides from menu) | `false` |
+| `paths` | Glob patterns — scope activation | `src/**/*.ts` |
 | `context` | `fork` for isolated context | `fork` |
 | `agent` | Agent type when forked | `Explore` |
 | `hooks` | Command-scoped hooks | See hooks section |
+| `shell` | Shell for `` !`...` `` | `bash` or `powershell` |
 
 ## Arguments
 
-**Flexible input**: `$ARGUMENTS` captures all args as string
-**Positional**: `$1`, `$2`, `$3` for structured parameters
+**Flexible input**: `$ARGUMENTS` captures all args as a single string.
+**Positional**: `$ARGUMENTS[N]` or `$N` — 0-indexed, so `$0` is the first argument, `$1` is the second.
+**Runtime vars**: `${CLAUDE_SESSION_ID}`, `${CLAUDE_SKILL_DIR}`.
 
 ```yaml
 argument-hint: [issue-number] [priority]
 ---
-Fix issue #$1 with priority $2
+Fix issue #$0 with priority $1
 ```
+
+Indexed args use shell-style quoting: `/fix "hello world" high` → `$0` = `hello world`, `$1` = `high`.
 
 ## Dynamic Content
 

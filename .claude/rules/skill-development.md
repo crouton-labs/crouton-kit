@@ -6,6 +6,8 @@ paths:
 
 # Skill Development Reference
 
+**Commands are now skills.** `.claude/commands/foo.md` and `.claude/skills/foo/SKILL.md` both create `/foo` and share the same frontmatter. Existing `commands/` files keep working; prefer `skills/` for anything needing bundled files, scripts, or per-skill hooks.
+
 ## File Structure
 
 ```
@@ -30,13 +32,40 @@ description: What it does and when to use it. Include trigger keywords.
 
 | Field | Description |
 |-------|-------------|
+| `argument-hint` | Autocomplete hint: `[issue-number]` |
 | `allowed-tools` | Restrict tools: `Read, Grep, Glob` |
 | `model` | Override model: `opus`, `sonnet`, `haiku` |
+| `effort` | Effort level: `low`, `medium`, `high`, `max` (Opus 4.6 only) |
 | `context` | `fork` for isolated subagent context |
-| `agent` | Agent type when forked: `Explore`, `Plan`, `general-purpose` |
-| `user-invocable` | `false` hides from slash menu |
-| `disable-model-invocation` | `true` prevents Skill tool invocation |
-| `hooks` | Skill-scoped hooks (PreToolUse, PostToolUse, Stop) |
+| `agent` | Agent type when forked: `Explore`, `Plan`, `general-purpose`, custom |
+| `user-invocable` | `false` hides from slash menu (agent-only) |
+| `disable-model-invocation` | `true` prevents autonomous invocation (user-only) |
+| `paths` | Glob patterns — only activate for matching files |
+| `hooks` | Skill-scoped hooks (same format as hooks.json, nested in frontmatter) |
+| `shell` | `bash` (default) or `powershell` for `` !`...` `` execution |
+
+## Arguments and Substitutions
+
+- `$ARGUMENTS` — all args as a single string
+- `$ARGUMENTS[N]` or `$N` — positional, 0-indexed (`$0` is first)
+- `${CLAUDE_SESSION_ID}` — current session ID
+- `${CLAUDE_SKILL_DIR}` — directory containing this SKILL.md (use for bundled scripts)
+
+If skill content doesn't include `$ARGUMENTS`, Claude Code appends `ARGUMENTS: <value>` to the end.
+
+## Dynamic Context Injection
+
+`` !`command` `` and ` ```! ` fenced blocks execute **before** the skill is sent to Claude — output replaces the placeholder. Preprocessing, not tool use.
+
+```markdown
+---
+allowed-tools: Bash(gh *)
+---
+
+PR diff: !`gh pr diff`
+```
+
+Include the word `ultrathink` anywhere in skill content to enable extended thinking.
 
 ## Writing Effective Descriptions
 

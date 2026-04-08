@@ -8,6 +8,8 @@ user-invocable: false
 
 Commands specify **constraints and mode**, not instructions. Claude already knows how to do most things — commands tell it what to do differently.
 
+**Commands and skills are the same thing now.** `.claude/commands/deploy.md` and `.claude/skills/deploy/SKILL.md` both produce `/deploy` and use the same frontmatter. Existing `commands/` files keep working. Prefer skills when you need bundled scripts, reference files, or per-skill hooks — see the skills-authoring skill for the full feature set.
+
 ## Structure
 
 ```markdown
@@ -22,8 +24,11 @@ Prompt content. Set role, constraints, then get out of the way.
 
 ## Features
 
-- `$ARGUMENTS` — all args as string, or `$1`, `$2` for positional
+- `$ARGUMENTS` — all args as a single string
+- `$ARGUMENTS[N]` or `$N` — positional arg by 0-based index (`$0` is first)
+- `${CLAUDE_SESSION_ID}`, `${CLAUDE_SKILL_DIR}` — runtime substitutions
 - `` !`git status` `` — inline bash execution (output included in context)
+- ` ```! ` fenced block — multi-line bash execution
 - `@path/to/file.ts` — file reference (contents included inline)
 
 Bash execution requires matching `allowed-tools` declarations.
@@ -53,16 +58,25 @@ Most commands should be **user-only** or **agent-only** — rarely both.
 | Field | Purpose |
 |-------|---------|
 | `model` | Override model (haiku for cheap, opus for capability) |
+| `effort` | Override effort level: `low`, `medium`, `high`, `max` |
 | `argument-hint` | Document expected args for autocomplete |
+| `paths` | Glob patterns — only activate when working with matching files |
+| `context: fork` | Run in an isolated subagent context |
+| `agent` | Subagent type when `context: fork` is set (`Explore`, `Plan`, etc.) |
+| `hooks` | Command-scoped hooks (same format as `hooks.json`, nested in frontmatter) |
+| `shell` | `bash` (default) or `powershell` for `` !`...` `` execution |
 
-## When to Use Commands vs Skills
+## Commands vs Skills
 
-| Commands | Skills |
-|----------|--------|
-| Quick, frequently used prompts | Complex multi-step workflows |
-| Single .md file | Directory with SKILL.md + reference files |
-| User explicitly invokes with `/` | Automatic discovery by context |
-| <200 lines | Extensive reference documentation |
+Functionally identical — same frontmatter, same invocation. Choose the file layout:
+
+| Single `.md` in `commands/` | Directory in `skills/` |
+|-----------------------------|------------------------|
+| Quick prompts, single file | Needs bundled scripts or reference files |
+| Existing muscle memory | Per-skill hooks via `hooks:` frontmatter |
+| <200 lines | Progressive disclosure across multiple `.md` files |
+
+If a command needs to grow supporting files or bundled scripts, convert it to a skill directory.
 
 ## Anti-Patterns
 

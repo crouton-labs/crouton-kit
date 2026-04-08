@@ -9,18 +9,51 @@ paths:
 
 ## Hook Types & Events
 
+**Session lifecycle**
+
 | Event | Trigger | Can Block | Matchers |
 |-------|---------|-----------|----------|
+| **SessionStart** | Session begins/resumes | No | Yes (startup/resume/clear/compact) |
+| **InstructionsLoaded** | CLAUDE.md and system instructions loaded | No | No |
+| **SessionEnd** | Session ends | No | No |
+| **ConfigChange** | settings.json reloads mid-session | No | No |
+| **CwdChanged** | Working directory changes | No | No |
+
+**Prompt and tool flow**
+
+| Event | Trigger | Can Block | Matchers |
+|-------|---------|-----------|----------|
+| **UserPromptSubmit** | User submits prompt | Yes | No |
 | **PreToolUse** | Before tool execution | Yes | Yes (tool name) |
 | **PermissionRequest** | Permission dialog shown | Yes | Yes (tool name) |
+| **PermissionDenied** | User denies permission | No | Yes (tool name) |
 | **PostToolUse** | After tool completes | No | Yes (tool name) |
-| **Notification** | Notification sent | No | Yes (notification type) |
-| **UserPromptSubmit** | User submits prompt | Yes | No |
+| **PostToolUseFailure** | Tool call fails | No | Yes (tool name) |
+| **FileChanged** | File modified outside Claude's tools | No | No |
 | **Stop** | Claude finishes response | Yes | No |
+| **StopFailure** | Claude stops due to error | No | No |
+| **Notification** | Notification sent | No | Yes (notification type) |
+
+**Subagents and teams**
+
+| Event | Trigger | Can Block | Matchers |
+|-------|---------|-----------|----------|
+| **SubagentStart** | Subagent spawns | No | No |
 | **SubagentStop** | Subagent finishes | Yes | No |
+| **TeammateIdle** | Teammate about to idle | Yes | No |
+| **TaskCreated** | Task added to task list | No | No |
+| **TaskCompleted** | Task marked complete | Yes | No |
+
+**Compaction, worktrees, elicitation**
+
+| Event | Trigger | Can Block | Matchers |
+|-------|---------|-----------|----------|
 | **PreCompact** | Before context compaction | No | Yes (manual/auto) |
-| **SessionStart** | Session begins/resumes | No | Yes (startup/resume/clear/compact) |
-| **SessionEnd** | Session ends | No | No |
+| **PostCompact** | After compaction finishes | No | No |
+| **WorktreeCreate** | New worktree created | No | No |
+| **WorktreeRemove** | Worktree removed | No | No |
+| **Elicitation** | MCP server requests user input | No | No |
+| **ElicitationResult** | User responds to elicitation | No | No |
 
 ## Configuration Structure
 
@@ -43,10 +76,28 @@ paths:
 }
 ```
 
-## Command vs Prompt-Based Hooks
+## Handler Types
 
-**Command hooks** (`type: "command"`): Execute bash scripts, deterministic logic
-**Prompt hooks** (`type: "prompt"`): Query LLM for decisions, use `$ARGUMENTS` for input
+- **`command`**: Execute shell scripts. Deterministic logic. JSON on stdin, JSON on stdout.
+- **`http`**: POST to a URL. Fields: `url`, `headers` (supports `$VAR` interpolation), `allowedEnvVars`, `timeout`. Response body is the same JSON shape as command hooks.
+- **`prompt`**: Query LLM for decisions. Fast, no tool access. Good for nuanced classification.
+- **`agent`**: Multi-turn subagent with tool access. Can investigate before deciding. Slowest.
+
+## Skill/Agent-Scoped Hooks
+
+Hooks can be declared in SKILL.md or agent frontmatter to scope them to that skill/agent only:
+
+```yaml
+---
+name: deploy
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "${CLAUDE_SKILL_DIR}/scripts/confirm.sh"
+---
+```
 
 ## Key Output Fields
 
@@ -55,12 +106,15 @@ paths:
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
-    "permissionDecision": "allow|deny|ask",
+    "permissionDecision": "allow|deny|ask|defer",
     "permissionDecisionReason": "explanation",
-    "updatedInput": { "field": "new_value" }
+    "updatedInput": { "field": "new_value" },
+    "additionalContext": "injected text"
   }
 }
 ```
+
+`"defer"` is only valid in headless mode (`claude -p`) — pauses Claude so the calling process can handle the tool call and resume via `claude -p --resume <session-id>`. Ignored in interactive sessions.
 
 ### Stop/SubagentStop
 ```json

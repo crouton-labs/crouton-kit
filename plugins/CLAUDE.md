@@ -38,7 +38,7 @@ Prompt content. Set role, constraints, then get out of the way.
 ```
 
 **Features:**
-- `$ARGUMENTS` - all args as string, or `$1`, `$2` for positional
+- `$ARGUMENTS` - all args as string; `$0`, `$1` for positional (0-indexed)
 - `` !`git status` `` - inline bash output
 - `@path/to/file.ts` - file reference
 

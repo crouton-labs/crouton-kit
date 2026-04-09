@@ -1,6 +1,6 @@
 {
   "name": "termrender",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Rich terminal rendering of directive-flavored markdown via the termrender CLI",
   "author": {
     "name": "Silas Rhyneer"

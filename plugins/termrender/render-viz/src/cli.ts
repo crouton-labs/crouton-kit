@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { loadBuiltin, loadConfigFile, listBuiltins, type Config } from "./config.js";
 import { gatherContext, type ContextSource } from "./context.js";
 import { generateVisualization } from "./render.js";
@@ -76,45 +76,14 @@ if (values["dry-run"]) {
   process.exit(0);
 }
 
-// Create tmux pane at 1/3 window width, then render into it.
-const windowWidth = getTmuxWindowWidth();
-if (!windowWidth) {
-  // Not in tmux — fall back to rendering to stdout.
-  const child = spawn("termrender", [result.tempFile], { stdio: "inherit" });
-  child.on("exit", (code) => {
-    result.cleanup();
-    process.exit(code ?? 0);
-  });
-} else {
-  const paneWidth = Math.floor((windowWidth - 2) / 3);
-  const renderWidth = Math.max(40, paneWidth - 2);
+const child = spawn("termrender", ["--tmux", result.tempFile], {
+  stdio: "inherit",
+});
 
-  // Create pane, capture its ID.
-  const split = spawnSync("tmux", [
-    "split-window", "-h", "-l", String(paneWidth), "-d",
-    "-P", "-F", "#{pane_id}",
-    "cat",
-  ], { encoding: "utf-8" });
-  const paneId = split.stdout.trim();
-
-  const child = spawn("termrender", [
-    "--pane", paneId, "-w", String(renderWidth), result.tempFile,
-  ], { stdio: "inherit" });
-
-  child.on("exit", (code) => {
-    setTimeout(() => result.cleanup(), 5000).unref();
-    process.exit(code ?? 0);
-  });
-}
-
-function getTmuxWindowWidth(): number | null {
-  if (!process.env.TMUX) return null;
-  const res = spawnSync("tmux", ["display-message", "-p", "#{window_width}"], {
-    encoding: "utf-8",
-  });
-  const width = parseInt(res.stdout.trim(), 10);
-  return Number.isFinite(width) ? width : null;
-}
+child.on("exit", (code) => {
+  setTimeout(() => result.cleanup(), 5000).unref();
+  process.exit(code ?? 0);
+});
 
 function printHelp(): void {
   console.log(`render-viz - Generate and display termrender visualizations

@@ -7340,7 +7340,7 @@ var require_dist = __commonJS({
 
 // src/cli.ts
 import { parseArgs } from "node:util";
-import { spawn, spawnSync as spawnSync2 } from "node:child_process";
+import { spawn } from "node:child_process";
 
 // src/config.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -30584,48 +30584,13 @@ if (values["dry-run"]) {
   result.cleanup();
   process.exit(0);
 }
-var windowWidth = getTmuxWindowWidth();
-if (!windowWidth) {
-  const child = spawn("termrender", [result.tempFile], { stdio: "inherit" });
-  child.on("exit", (code) => {
-    result.cleanup();
-    process.exit(code ?? 0);
-  });
-} else {
-  const paneWidth = Math.floor((windowWidth - 2) / 3);
-  const renderWidth = Math.max(40, paneWidth - 2);
-  const split = spawnSync2("tmux", [
-    "split-window",
-    "-h",
-    "-l",
-    String(paneWidth),
-    "-d",
-    "-P",
-    "-F",
-    "#{pane_id}",
-    "cat"
-  ], { encoding: "utf-8" });
-  const paneId = split.stdout.trim();
-  const child = spawn("termrender", [
-    "--pane",
-    paneId,
-    "-w",
-    String(renderWidth),
-    result.tempFile
-  ], { stdio: "inherit" });
-  child.on("exit", (code) => {
-    setTimeout(() => result.cleanup(), 5e3).unref();
-    process.exit(code ?? 0);
-  });
-}
-function getTmuxWindowWidth() {
-  if (!process.env.TMUX) return null;
-  const res = spawnSync2("tmux", ["display-message", "-p", "#{window_width}"], {
-    encoding: "utf-8"
-  });
-  const width = parseInt(res.stdout.trim(), 10);
-  return Number.isFinite(width) ? width : null;
-}
+var child = spawn("termrender", ["--tmux", result.tempFile], {
+  stdio: "inherit"
+});
+child.on("exit", (code) => {
+  setTimeout(() => result.cleanup(), 5e3).unref();
+  process.exit(code ?? 0);
+});
 function printHelp() {
   console.log(`render-viz - Generate and display termrender visualizations
 

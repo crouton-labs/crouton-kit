@@ -7340,7 +7340,7 @@ var require_dist = __commonJS({
 
 // src/cli.ts
 import { parseArgs } from "node:util";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync as spawnSync2 } from "node:child_process";
 
 // src/config.ts
 var import_yaml = __toESM(require_dist(), 1);
@@ -21115,7 +21115,7 @@ function date4(params) {
 config(en_default());
 
 // configs/debug.yaml
-var debug_default = 'model: claude-haiku-4-5-20251001\nmax_messages: 30\nmax_chars: 40000\nsystem_prompt: |\n  You convert debugging investigations into dense visual summaries\n  rendered as termrender directive-flavored markdown.\n\n  # How to use termrender\n\n  termrender is a CLI that renders directive-flavored markdown as rich\n  terminal output. You have `Bash` and `Write` tools. Your workflow:\n\n    1. Write your markdown to the file path given in the user prompt.\n    2. Run: `termrender --check <path>` to validate the syntax.\n       - Exit 0 means valid.\n       - Exit 2 means there is a syntax error \u2014 stdout/stderr will\n         explain which directive is broken and how to fix it.\n    3. If validation fails, read the error, fix the markdown, write it\n       again with the `Write` tool, and re-run `termrender --check`.\n    4. Repeat until `termrender --check` exits 0.\n    5. Respond with "done" when the file is valid.\n\n  Do NOT run `termrender` without `--check` \u2014 you\'re only validating,\n  not rendering. Never open tmux panes or use `--tmux`.\n\n  # Termrender directive reference\n\n  Directives open with 3+ colons and close with a matching colon count.\n  `:::divider`, `:::progress`, `:::gauge` are self-closing at top level\n  (no body, no closer).\n\n  ## CRITICAL: no nesting\n\n  Do NOT nest directives inside each other. Every directive below must\n  appear at the top level, separated by blank lines. Do NOT use columns\n  or nest stats inside panels etc. Keep directives flat.\n\n  ## Available directives\n\n  Every non-self-closing directive MUST have a matching `:::` closer\n  on its own line. Attributes use `key="value"`.\n\n  Panel \u2014 bordered box with title:\n    :::panel{title="Root cause" color="red"}\n    Body text describing the cause.\n    :::\n\n  Callout \u2014 status box. type=info|warning|error|success\n    :::callout{type="error"}\n    Short status message.\n    :::\n\n  Tree \u2014 hierarchy via 2-space indentation:\n    :::tree{color="cyan"}\n    Root\n      Child A\n      Child B\n        Grandchild\n    :::\n\n  Diff \u2014 unified diff, +/- prefixes:\n    :::diff{title="src/foo.py"}\n    - old_line\n    + new_line\n      context_line\n    :::\n\n  Tasklist \u2014 checkboxes: [x] done, [ ] todo, [!] in progress\n    :::tasklist\n    - [x] finished step\n    - [ ] todo step\n    - [!] in-progress step\n    :::\n\n  Timeline \u2014 events, body is `- label: event` per line:\n    :::timeline{title="Incident"}\n    - 10:02: first error observed\n    - 10:05: root cause identified\n    :::\n\n  Quote:\n    :::quote{author="Name"}\n    Quoted text.\n    :::\n\n  Code \u2014 syntax highlighted:\n    :::code{lang="python"}\n    def foo():\n        return 42\n    :::\n\n  Bar chart \u2014 body is `label: value` per line:\n    :::bar{title="errors per file" color="red"}\n    config.ts: 14\n    app.ts: 3\n    :::\n\n  Mermaid diagrams \u2014 use `graph TD`, 3-6 nodes max:\n    ```mermaid\n    graph TD\n        A[Start] --> B{Check}\n        B -->|yes| C[Action]\n        B -->|no| D[End]\n    ```\n\n  Self-closing directives (no body, no closer):\n    :::divider{label="Section title"}\n    :::progress{value=70 max=100 label="Task"}\n    :::gauge{value=88 max=100 label="Memory" unit="%"}\n\n  # Colors\n\n  red, green, yellow, blue, magenta, cyan, white, gray\n\n  # Output rules\n\n  - The file content must be ONLY markdown. No prose preamble or explanation.\n  - Do NOT wrap the entire output in a ``` code fence.\n  - Do NOT nest directives inside other directives.\n  - Every non-self-closing directive needs a `:::` closer on its own line.\n  - Separate directives with blank lines.\n  - Keep it dense: aim for 1-2 screens, not a wall of text.\n\nprompt: |\n  Below is a debugging investigation. Produce a visual summary of what\n  was investigated and found.\n\n  Suggested structure (omit sections that don\'t apply):\n  1. Panel with the root cause (color=red if confirmed, yellow if suspected)\n  2. Mermaid diagram showing the failing call/data flow (3-6 nodes)\n  3. Diff block showing the proposed fix\n  4. Tasklist of remediation steps or verification items\n\n  Use file paths and symbol names verbatim from the investigation.\n  Do NOT use columns or nested directives.\n\n  ==== CONVERSATION ====\n  {{context}}\n';
+var debug_default = 'model: claude-haiku-4-5-20251001\nmax_messages: 30\nmax_chars: 40000\nsystem_prompt: |\n  You convert debugging investigations into dense visual summaries\n  rendered as termrender directive-flavored markdown.\n\n  # How to use termrender\n\n  termrender is a CLI that renders directive-flavored markdown as rich\n  terminal output. You have `Bash` and `Write` tools. Your workflow:\n\n    1. Write your markdown to the file path given in the user prompt.\n    2. Run: `termrender --check <path>` to validate the syntax.\n       - Exit 0 means valid.\n       - Exit 2 means there is a syntax error \u2014 stdout/stderr will\n         explain which directive is broken and how to fix it.\n    3. If validation fails, read the error, fix the markdown, write it\n       again with the `Write` tool, and re-run `termrender --check`.\n    4. Repeat until `termrender --check` exits 0.\n    5. Respond with "done" when the file is valid.\n\n  Do NOT run `termrender` without `--check` \u2014 you\'re only validating,\n  not rendering. Never open tmux panes or use `--tmux`.\n\n  # Termrender directive reference\n\n  Directives open with 3+ colons and close with a matching colon count.\n  `:::divider`, `:::progress`, `:::gauge` are self-closing at top level\n  (no body, no closer).\n\n  ## CRITICAL: no nesting\n\n  Do NOT nest directives inside each other. Every directive below must\n  appear at the top level, separated by blank lines. Do NOT use columns\n  or nest stats inside panels etc. Keep directives flat.\n\n  ## Available directives\n\n  Every non-self-closing directive MUST have a matching `:::` closer\n  on its own line. Attributes use `key="value"`.\n\n  Panel \u2014 bordered box with title:\n    :::panel{title="Root cause" color="red"}\n    Body text describing the cause.\n    :::\n\n  Callout \u2014 status box. type=info|warning|error|success\n    :::callout{type="error"}\n    Short status message.\n    :::\n\n  Tree \u2014 hierarchy via 2-space indentation:\n    :::tree{color="cyan"}\n    Root\n      Child A\n      Child B\n        Grandchild\n    :::\n\n  Diff \u2014 unified diff, +/- prefixes:\n    :::diff{title="src/foo.py"}\n    - old_line\n    + new_line\n      context_line\n    :::\n\n  Tasklist \u2014 checkboxes: [x] done, [ ] todo, [!] in progress\n    :::tasklist\n    - [x] finished step\n    - [ ] todo step\n    - [!] in-progress step\n    :::\n\n  Timeline \u2014 events, body is `- label: event` per line:\n    :::timeline{title="Incident"}\n    - 10:02: first error observed\n    - 10:05: root cause identified\n    :::\n\n  Quote:\n    :::quote{author="Name"}\n    Quoted text.\n    :::\n\n  Code \u2014 syntax highlighted:\n    :::code{lang="python"}\n    def foo():\n        return 42\n    :::\n\n  Bar chart \u2014 body is `label: value` per line:\n    :::bar{title="errors per file" color="red"}\n    config.ts: 14\n    app.ts: 3\n    :::\n\n  Mermaid diagrams \u2014 use `graph TD`, 3-6 nodes max:\n    ```mermaid\n    graph TD\n        A[Start] --> B{Check}\n        B -->|yes| C[Action]\n        B -->|no| D[End]\n    ```\n\n  Self-closing directives (no body, no closer):\n    :::divider{label="Section title"}\n    :::progress{value=70 max=100 label="Task"}\n    :::gauge{value=88 max=100 label="Memory" unit="%"}\n\n  # Colors\n\n  red, green, yellow, blue, magenta, cyan, white, gray\n\n  # Output rules\n\n  - The file content must be ONLY markdown. No prose preamble or explanation.\n  - Do NOT wrap the entire output in a ``` code fence.\n  - Do NOT nest directives inside other directives.\n  - Every non-self-closing directive needs a `:::` closer on its own line.\n  - Separate directives with blank lines.\n  - Keep it dense: aim for 1-2 screens worth of content, not a wall of text.\n\nprompt: |\n  Below is a debugging investigation. Produce a visual summary of what\n  was investigated and found.\n\n  Suggested structure (omit sections that don\'t apply):\n  1. Panel with the root cause (color=red if confirmed, yellow if suspected)\n  2. Mermaid diagram showing the failing call/data flow (3-6 nodes)\n  3. Diff block showing the proposed fix\n  4. Tasklist of remediation steps or verification items\n\n  Use file paths and symbol names verbatim from the investigation.\n  Do NOT use columns or nested directives.\n\n  ==== CONVERSATION ====\n  {{context}}\n';
 
 // src/config.ts
 var ConfigSchema = external_exports.object({
@@ -30584,14 +30584,48 @@ if (values["dry-run"]) {
   result.cleanup();
   process.exit(0);
 }
-var child = spawn("termrender", ["--tmux", result.tempFile], {
-  stdio: "inherit",
-  detached: false
-});
-child.on("exit", (code) => {
-  setTimeout(() => result.cleanup(), 5e3).unref();
-  process.exit(code ?? 0);
-});
+var windowWidth = getTmuxWindowWidth();
+if (!windowWidth) {
+  const child = spawn("termrender", [result.tempFile], { stdio: "inherit" });
+  child.on("exit", (code) => {
+    result.cleanup();
+    process.exit(code ?? 0);
+  });
+} else {
+  const paneWidth = Math.floor((windowWidth - 2) / 3);
+  const renderWidth = Math.max(40, paneWidth - 2);
+  const split = spawnSync2("tmux", [
+    "split-window",
+    "-h",
+    "-l",
+    String(paneWidth),
+    "-d",
+    "-P",
+    "-F",
+    "#{pane_id}",
+    "cat"
+  ], { encoding: "utf-8" });
+  const paneId = split.stdout.trim();
+  const child = spawn("termrender", [
+    "--pane",
+    paneId,
+    "-w",
+    String(renderWidth),
+    result.tempFile
+  ], { stdio: "inherit" });
+  child.on("exit", (code) => {
+    setTimeout(() => result.cleanup(), 5e3).unref();
+    process.exit(code ?? 0);
+  });
+}
+function getTmuxWindowWidth() {
+  if (!process.env.TMUX) return null;
+  const res = spawnSync2("tmux", ["display-message", "-p", "#{window_width}"], {
+    encoding: "utf-8"
+  });
+  const width = parseInt(res.stdout.trim(), 10);
+  return Number.isFinite(width) ? width : null;
+}
 function printHelp() {
   console.log(`render-viz - Generate and display termrender visualizations
 

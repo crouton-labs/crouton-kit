@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Stop hook: if the /devcore:debug marker is present, fire render-viz in
-# the background to visualize the investigation, then clear the marker.
+# Stop hook: if the /rpi:plan or /rpi:arch marker is present, fire render-viz
+# in the background to visualize the output, then clear the marker.
 #
 # Gracefully no-ops if render-viz is not installed.
 #
@@ -26,16 +26,18 @@ if [[ -z "$session_id" || -z "$transcript_path" ]]; then
     exit 0
 fi
 
-marker="/tmp/render-viz-debug-${session_id}"
+marker="/tmp/render-viz-rpi-${session_id}"
 if [[ ! -f "$marker" ]]; then
     exit 0
 fi
 
+builtin=$(cat "$marker")
 rm -f "$marker" 2>/dev/null || true
 
 # Fire and forget. Fully detach so Claude's Stop isn't blocked.
-nohup render-viz --builtin debug --session "$session_id" --transcript "$transcript_path" \
-    >/tmp/render-viz-debug-${session_id}.log 2>&1 </dev/null &
+nohup render-viz --builtin "$builtin" --session "$session_id" \
+    --transcript "$transcript_path" \
+    >/tmp/render-viz-rpi-${session_id}.log 2>&1 </dev/null &
 disown
 
 exit 0

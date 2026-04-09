@@ -1,0 +1,22 @@
+{
+  "name": "render-viz",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "render-viz": "./bin/render-viz"
+  },
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=bin/render-viz --banner:js=\"#!/usr/bin/env node\nimport{createRequire}from'module';const require=createRequire(import.meta.url);\" --loader:.yaml=text",
+    "dev": "npm run build && node bin/render-viz"
+  },
+  "dependencies": {
+    "@r-cli/sdk": "^1.1.117",
+    "yaml": "^2.6.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

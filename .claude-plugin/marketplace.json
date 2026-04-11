@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "crouton-kit",
-  "version": "1.35.3",
+  "version": "1.35.4",
   "owner": {
     "name": "Silas Rhyneer",
     "email": "silas@example.com"
@@ -45,7 +45,7 @@
       "name": "knowledge-capture",
       "source": "./plugins/knowledge-capture",
       "description": "Requirements gathering, interviews, and learning commands",
-      "version": "1.2.2",
+      "version": "1.2.3",
       "keywords": [
         "requirements",
         "interview",

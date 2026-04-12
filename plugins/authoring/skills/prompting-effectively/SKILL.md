@@ -33,45 +33,15 @@ The most important architectural decision: what goes where.
 
 System prompt content gets treated as foundational identity. Task-zone content layers on top — it *redirects* the agent without replacing who it is. Knowledge gets treated as reference material. Mixing these up creates agents that treat their own rules as optional suggestions, or user-turn prompts that fight the system prompt for control of identity.
 
-## XML as Cognitive Fencing
+## XML for Instruction Domains
 
-XML tags in prompts aren't formatting — they're **boundaries between concern domains**. They create a filing system the model can navigate.
+Use XML tags to separate concern domains (identity, safety, tools, formatting). Rules:
 
-**Use XML to separate instruction domains:**
-
-```xml
-<tone_and_formatting>
-  How to write responses
-</tone_and_formatting>
-
-<safety_rules>
-  What to refuse
-</safety_rules>
-
-<tool_usage>
-  When and how to use tools
-</tool_usage>
-```
-
-**Rules:**
 - Section-level boundaries only — don't wrap every paragraph
-- Two levels of nesting maximum for instructions
-- Deeper nesting is fine for examples
+- Two levels of nesting maximum for instructions (deeper is fine for examples)
 - Over-tagging creates noise that dilutes the structural signal
 
-## Format to Content
-
-Match formatting to what you're communicating:
-
-| Format | Use for |
-|--------|---------|
-| Prose paragraphs | Behavioral principles, personality, nuanced guidance |
-| Markdown headers | Organizing longer sections with sub-topics |
-| Bullet points | Discrete parallel rules ("never do X" lists) |
-| Bold text | Emphasis on critical terms (sparingly) |
-| Code blocks | Literal syntax, templates, API patterns |
-
-**Principle:** Use the lightest formatting that makes the content clear. A tone section should read as prose. A list of prohibited actions can use bullets. Over-formatted system prompts bleed into over-formatted responses.
+Over-formatted system prompts bleed into over-formatted responses — use the lightest formatting that makes content clear.
 
 ## Tone Registers
 
@@ -116,8 +86,6 @@ Absolute rules that should not be overridden by context.
 Most guidance sits at levels 2–3. Reserve 4–5 for genuine non-negotiables. If everything is CRITICAL, nothing is.
 
 ## Examples
-
-Examples are disproportionately effective relative to their token cost. A single good example communicates more than paragraphs of abstract instruction.
 
 **Rules:**
 - Place examples adjacent to the rules they illustrate — never in a separate appendix

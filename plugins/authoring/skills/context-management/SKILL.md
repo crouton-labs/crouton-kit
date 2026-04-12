@@ -115,22 +115,4 @@ JetBrains Research (2025) compared observation masking vs. LLM summarization in 
 
 Anthropic's recommended escalation: (1) clear tool outputs after use, (2) structured note-taking outside context, (3) sub-agent delegation returning 1–2K token summaries.
 
-## Tool Results: The Context Pollution Problem
 
-Every token of raw tool output is carried forward to every subsequent call. A single `ls` on a large directory dumps thousands of lines. Prevention:
-
-1. **Truncate at the call site** — use offset/limit parameters, cap output length
-2. **Post-use clearing** — remove raw output once the model has extracted what it needs
-3. **Sub-agent delegation** — send exploration tasks to sub-agents that return summaries
-4. **Programmatic tool calling** — execute in code, return only results
-
-## Common Mistakes
-
-- **Trusting advertised context length.** Effective reasoning is 50–65% of claimed for complex tasks.
-- **Putting critical content in the middle.** The U-curve is real. Beginning or end.
-- **Applying HyDE to factoid queries.** It actively hurts. -0.065 precision vs. naive RAG.
-- **Summarizing instead of masking tool outputs.** Summaries hide failure signals. Masking is cheaper and better.
-- **Using abstractive compression on fact-retrieval tasks.** Extractive is +7.89 F1; abstractive is -4.69 F1.
-- **Static content after dynamic content.** Anything that changes per-request at the top of a system prompt breaks caching.
-- **Context stuffing.** More retrieved passages = more hallucination risk, not less.
-- **Embedding model drift.** If the model at query time differs from index time, retrieval breaks silently.

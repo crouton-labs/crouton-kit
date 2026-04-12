@@ -11,16 +11,6 @@ This skill covers practical techniques to break that convergence, ranked by impa
 
 For implementation patterns and examples, see [reference.md](reference.md).
 
-## Why Outputs Converge
-
-Three forces drive repetition:
-
-1. **Static prompts produce static distributions.** The same prompt tokens activate the same attention patterns, producing outputs from the same narrow region of the distribution. Small models have less internal diversity to draw from.
-
-2. **Few-shot anchoring.** Examples in the prompt are disproportionately influential. The model doesn't just learn the *style* — it learns specific phrases, sentence structures, and opening words from examples and reproduces them.
-
-3. **Temperature is weak medicine.** Anthropic's API caps temperature at 1.0. Even at max, temperature only widens the sampling distribution slightly — it doesn't change which tokens the model *wants* to produce. For short outputs (under 50 tokens), temperature effects are minimal because there aren't enough sequential choices for randomness to compound.
-
 ## Techniques (Ranked by Impact)
 
 ### 1. Inject Recent Outputs as Negative Examples
@@ -112,13 +102,6 @@ Explicit phrase banning is more effective than general "be creative" instruction
 After generation, compare the output against the last N outputs using a simple similarity metric (Jaccard on word sets, or even substring matching). If similarity exceeds a threshold, regenerate with the failed output added to the negative examples.
 
 This costs an extra API call occasionally but guarantees variety. Use it as a backstop, not a primary mechanism — if you're regenerating frequently, your prompt-level techniques need tuning.
-
-## What Doesn't Work
-
-- **"Be creative" / "Be original"** — Vague aspirational instructions have near-zero effect on small models. They're not constraints, they're wishes.
-- **Temperature alone** — Anthropic caps at 1.0. Even at max, the effect on short outputs is minimal. Temperature helps on long-form generation where randomness compounds over hundreds of tokens; for 1-2 sentences, it barely matters.
-- **Frequency/presence penalties** — Not exposed in Anthropic's API.
-- **Rewriting the entire prompt** — Radical prompt changes sacrifice consistency of character/tone for variety. The techniques above achieve variety *within* a consistent voice.
 
 ## When to Apply This
 

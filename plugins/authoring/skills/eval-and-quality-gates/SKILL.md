@@ -11,18 +11,6 @@ This skill covers what actually works, ranked by when to use it, and what to ski
 
 For implementation patterns and code, see [reference.md](reference.md).
 
-## Why Evaluation Is Hard
-
-Three properties of LLM systems make evaluation genuinely difficult:
-
-1. **No ground truth for subjective outputs.** "Is this a good response?" has no deterministic answer. You need proxies — human labels, LLM judges, task-specific metrics — each with their own error rates.
-
-2. **Outputs vary within acceptable ranges.** Two correct answers to the same question can look completely different. String matching fails. Semantic similarity helps but also fails at the margins (see Metrics That Are Theater).
-
-3. **Distributions shift silently.** Model providers update models behind static API versions. User inputs drift over time. A system that worked last month can degrade without any code change.
-
-The response to this difficulty is usually one of two mistakes: skipping evaluation entirely ("we'll know good output when we see it"), or over-engineering it with LLM-based judges before the simple assertions are in place.
-
 ## The Three-Layer Hierarchy
 
 Build validation from cheap and deterministic to expensive and probabilistic. Each layer catches different failures.
@@ -103,8 +91,6 @@ Match the metric to the task:
 ## Production Monitoring
 
 Static test suites catch regressions only if you run them. In production, you need continuous monitoring on real traffic.
-
-**What to log**: full input/output pairs, token counts, latency, model version, retrieval context for RAG systems, cost per query, user feedback signals, and judge scores if running online evaluation.
 
 **Alerting thresholds** (from research):
 - Pass rate drops >5% below baseline over 24h: investigate

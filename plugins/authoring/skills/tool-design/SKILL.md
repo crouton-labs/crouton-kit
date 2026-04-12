@@ -124,27 +124,3 @@ Keep identifier types consistent across your tool suite. If `search_users` retur
 
 Design tool outputs to be minimally sufficient. A tool that returns 50 fields when 3 are relevant fills the context window with noise. Return what the model needs to continue. Provide separate detail-retrieval tools if needed.
 
-## When Not to Use Tools
-
-Tools have overhead — latency, token cost, parsing complexity, and selection decisions. Don't reach for them when prompting handles it better.
-
-**Prompting is sufficient when:**
-- The task is pure reasoning or transformation with no external I/O (reformatting, classifying, answering from training knowledge)
-- The operation is one-shot with no external state (generating a UUID, converting units)
-- The output format is the only constraint — use format instructions, not a "formatter" tool
-
-**Use tools when:**
-- The task requires external state (files, databases, APIs)
-- The task requires information the model doesn't have (current time, real-time data, user-specific data)
-- The task requires actions with side effects (sending messages, writing files, executing code)
-- Computation requires accuracy the model can't guarantee (arithmetic on large numbers, date math)
-
-The wrong answer is "tools for everything." Every tool in context is a selection decision the model must make. Noise in the tool list degrades accuracy on the tools that matter.
-
-## Anti-Patterns
-
-- **Vague descriptions that defer to model judgment** — "Use when appropriate" is not guidance. Concrete: "Use when the user references a specific file by path."
-- **Silent failures** — returning `{ "success": false }` with no detail looks identical to "correctly found nothing." The model reports no results when the real problem was a fixable bad query.
-- **Over-parameterized tools** — a tool with 15 parameters gets called wrong. Most will be left at defaults, making the complexity pure cost.
-- **Inconsistent schemas across a tool suite** — if `search_users` returns `user_id` but `send_message` takes `userId`, the model must silently reconcile the mismatch. It often won't.
-- **Optional parameters that are secretly required for useful results** — if calling without `filter` returns 50,000 records, either make `filter` required or design a sensible default. The model has no way to know a call will be destructively expensive.

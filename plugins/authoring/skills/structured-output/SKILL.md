@@ -50,21 +50,14 @@ Put a `reasoning` or `thinking` field **first** in your schema. LLMs generate ke
 
 ### Rules that matter
 
-**Do:**
-- All fields in `required`. No exceptions. Optional fields → `type: ["string", "null"]` union.
-- `additionalProperties: false` on every object.
 - Flat over nested. PARSE found flattening was the most frequent successful optimization (55% of cases).
 - Specific field descriptions: "Full legal name including first and last" beats "The name". Specific descriptions reduced errors by up to 64.7% (PARSE).
 - String enums for constrained choices — reduces downstream cleaning by ~70% (PARSE).
+- `minimum`/`maximum`/`pattern` — neither Anthropic nor OpenAI enforces these at the grammar level. Validate post-generation.
+- Max 24 optional parameters (Anthropic hard limit). Each optional field roughly doubles grammar state space.
+- Recursive schemas not supported on Anthropic.
 
 These patterns apply directly to [tool-design](../tool-design/SKILL.md) — tool schemas are structured output schemas.
-
-**Don't:**
-- Nest beyond 3 levels. OpenAI hard caps at 5.
-- Lean on `minimum`/`maximum`/`pattern` — neither Anthropic nor OpenAI enforces these at the grammar level. Validate post-generation.
-- More than 24 optional parameters (Anthropic hard limit). Each optional field roughly doubles grammar state space.
-- Recursive schemas on Anthropic (not supported).
-- Ambiguous sibling field names.
 
 ## The Production Loop
 
@@ -106,17 +99,7 @@ Full schema validation cannot run until the stream completes — incomplete data
 
 Vercel AI SDK's `streamObject` returns a `partialObjectStream` that emits typed partial objects field-by-field. Its `elementStream` emits only fully completed array elements.
 
-## Common Failure Modes
-
-1. **Silent semantic failures** — required field filled with `""` or `null` because the model lacked information. Passes schema validation, corrupts downstream logic. Fix: Pydantic `@field_validator` / Zod `.min(1)` / `.refine()`.
-
-2. **Truncation** — constrained decoding guarantees valid tokens but can't force completion if you hit `max_tokens` mid-JSON. Set `max_tokens` generously above expected output size.
-
-3. **Reasoning degradation** — accuracy drops on multi-step tasks. Fix: `reasoning` field first, or two-pass generation (free text → convert to JSON).
-
-4. **Ambiguous field names** — 95% → 4.5% drop from a single naming collision. Audit field names as a unit before deploying.
-
-5. **Constraint budget exceeded** — Anthropic throws on >24 optional params or >16 union types. Flatten your schema.
+**Key failure stat:** A single ambiguous field name (`final_choice` alongside `potential_final_choices`) collapsed accuracy from 95% → 4.5% in Instructor's experiments. Audit field names as a unit.
 
 For a full failure mode catalog with mitigations, see [reference.md](reference.md).
 

@@ -37,36 +37,23 @@ Independent multi-agent systems without orchestrator validation **amplify errors
 
 ### Orchestrator-Worker (Fan-Out)
 
-The dominant production pattern. A central orchestrator decomposes tasks dynamically, delegates to workers, synthesizes results. Workers get self-contained instructions with all necessary context — they don't share state or talk to each other.
-
-**Use when**: Complex tasks where subtasks can't be predicted in advance. Multi-file codebase changes, research gathering from multiple sources, parallel implementation of independent features.
+**Use when**: Subtasks can't be predicted in advance — multi-file changes, parallel research, independent feature implementation.
 
 **Key constraint**: Orchestrator owns the quality bar. Workers don't decide if they're done — the orchestrator does.
 
 **Production evidence**: Anthropic's internal research system uses Opus as orchestrator with Sonnet subagents, outperforming single-agent Opus 4 by 90.2%. Typical spawn count: 3-5 subagents. [[Anthropic (2025)](https://www.anthropic.com/engineering/multi-agent-research-system)]
 
-```
-Orchestrator
-  ├── agent-001: implement auth middleware
-  ├── agent-002: implement session store
-  └── agent-003: review auth design (parallel quality)
-```
-
 ### Pipeline (Sequential Chain)
 
-Agents process work in stages. Output of one feeds the next. MetaGPT formalizes this as software SOPs: Product Manager → Architect → Engineer → QA. [[Hong et al. (2023) — MetaGPT](https://arxiv.org/abs/2308.00352)]
+**Use when**: Natural sequential dependencies — plan → implement → review → validate.
 
-**Use when**: Work has natural sequential dependencies — plan → implement → review → validate.
+**Critical vulnerability**: Corrupted output from one stage compounds at each subsequent step. [[MAS-FIRE (2026)](https://arxiv.org/html/2602.19843)]
 
-**Critical vulnerability**: Linear pipelines have no error recovery. A corrupted output from one stage propagates downstream unchecked, compounding at each step. A single planning error halts the entire workflow. [[MAS-FIRE (2026)](https://arxiv.org/html/2602.19843)]
-
-**Mitigation**: Add critic loops. A critique-refinement cycle after key stages neutralizes cascading faults. Never run 2+ sequential stages without a review gate.
+**Mitigation**: Never run 2+ sequential stages without a review gate. Critique-refinement cycles after key stages neutralize cascading faults.
 
 ### Debate / Critic
 
-Multiple agents review each other's work. Fresh agents critique without confirmation bias — researchers don't review their own findings. Results are aggregated by majority vote or orchestrator synthesis.
-
-**Use when**: Correctness matters more than speed. Math reasoning, security review, plan validation.
+**Use when**: Correctness matters more than speed — math reasoning, security review, plan validation.
 
 **Sisyphus review pattern** (two-layer filtering):
 ```
@@ -84,17 +71,13 @@ Findings that don't survive validation get dropped before they reach the impleme
 
 ### Hierarchical Delegation
 
-Sub-orchestrators manage their own teams. The top-level orchestrator spawns coordinators; coordinators spawn workers. Each level manages its own scope.
+**Use when**: Large features spanning 15+ files or 3+ subsystems — when a single orchestrator would need too much context.
 
-**Use when**: Large features spanning 15+ files or 3+ subsystems. When a single orchestrator would need too much context to manage everything directly.
-
-**Key design**: Sub-agents are invisible to the parent orchestrator. The coordinator is the abstraction boundary. This prevents the orchestrator from micromanaging.
+**Key constraint**: The coordinator is the abstraction boundary. Sub-agents are invisible to the parent orchestrator.
 
 ### Stateless Orchestrator Cycles
 
-For long-running sessions, kill the orchestrator after each cycle and respawn it fresh with updated state. The orchestrator has no memory beyond what's in its prompt. State persists via files, not agent memory.
-
-**Why this matters**: Prevents context exhaustion on sessions that run for hours. Each cycle the orchestrator gets a clean window with the latest state — no stale context from 50 cycles ago.
+Prevents context exhaustion on sessions that run for hours. State persists via files, not agent memory — each cycle gets a clean context window with only the latest state.
 
 **Proven in production**: Sisyphus, Anthropic's research system, and similar architectures all use this pattern.
 
@@ -102,25 +85,15 @@ For long-running sessions, kill the orchestrator after each cycle and respawn it
 
 Every handoff between agents is a risk point. The most common failure category in production multi-agent systems — **37% of all failures** — is inter-agent coordination breakdown, not individual LLM limitations. [[Cemri, Pan, Yang et al. (2025) — Why Do Multi-Agent LLM Systems Fail?](https://arxiv.org/abs/2503.13657)]
 
-The coordination tax shows up as:
-- **Context pollution**: An agent's output exceeds another's context window and critical details vanish
-- **Task derailment**: Agents overstep scope and start doing adjacent work
-- **Cascading errors**: One bad output propagates undetected through subsequent stages
-- **Tool overload**: Performance degrades proportionally with tool count; 16+ tools per agent creates disproportionate overhead
+Specific threshold: 16+ tools per agent creates disproportionate performance overhead.
 
 ## Common Failure Modes
 
-**1. Multi-agent for sequential tasks** — If the subtasks can't run independently, you pay coordination cost with no parallelism benefit. The metric to check: can subtask B start before subtask A finishes? If no, keep it single-agent.
+**1. Vague agent instructions** — "Look at the existing auth middleware" fails. "Implement auth middleware per `context/requirements-auth.md` and `context/design-auth.md`. Reference `context/conventions.md` for middleware patterns." works. Each agent instruction must be self-contained.
 
-**2. Vague agent instructions** — "Look at the existing auth middleware" fails. "Implement auth middleware per `context/requirements-auth.md` and `context/design-auth.md`. Reference `context/conventions.md` for middleware patterns." works. Each agent instruction must be self-contained.
+**2. Spawning too many agents** — Early versions of Anthropic's research system spawned 50+ subagents for simple queries. Simple fact-finding: 1 agent. Direct comparisons: 2-4. Complex research: 10+. [[Anthropic (2025)](https://www.anthropic.com/engineering/multi-agent-research-system)]
 
-**3. Skipping review cycles** — 2+ stages completing without critique is the trigger for stopping and catching up. Unreviewed work compounds. A conservative implementation gets caught by reviewers; an unreviewed implementation ships broken.
-
-**4. Spawning too many agents** — Early versions of Anthropic's research system spawned 50+ subagents for simple queries. Simple fact-finding: 1 agent. Direct comparisons: 2-4. Complex research: 10+. [[Anthropic (2025)](https://www.anthropic.com/engineering/multi-agent-research-system)]
-
-**5. Framework over-engineering** — "The most successful implementations weren't using complex frameworks or specialized libraries." Simple, composable patterns beat abstraction layers. Frameworks obscure prompts and responses, complicating debugging. [[Anthropic (2024) — Building Effective AI Agents](https://www.anthropic.com/research/building-effective-agents)]
-
-**6. Ambition in worker prompts** — Workers' primary failure mode is scope creep, not timidity. Ambition belongs at the orchestrator. Workers should have narrow scope and conservative behavior. The "bail and report" pattern — stop, flag unexpected complexity, let the orchestrator decide — is load-bearing.
+**3. Framework over-engineering** — "The most successful implementations weren't using complex frameworks or specialized libraries." [[Anthropic (2024) — Building Effective AI Agents](https://www.anthropic.com/research/building-effective-agents)]
 
 ## Prompt Asymmetry: Orchestrators vs Workers
 
@@ -135,14 +108,6 @@ Orchestrators and workers have opposite prompt requirements:
 | Lifecycle | Killed and respawned each cycle | Runs to completion or failure |
 
 Orchestrator prompts need decision heuristics — concrete triggers for when to spawn research agents, when to add review gates, when to stop and reassess. Worker prompts need scope boundaries and a reporting protocol. See [reference.md](reference.md) for annotated examples of both.
-
-## Model Selection
-
-- **Orchestrator**: Best available model (Opus/o3). Sets the quality ceiling.
-- **Workers**: Cheaper models (Sonnet/Haiku) for well-scoped tasks.
-- **Reviewers**: Match model to severity — security and correctness get expensive models; style gets cheap ones.
-
-Counterintuitively, larger models sometimes decrease accuracy without architectural constraints. Smaller, fine-tuned models with proper harnesses can outperform larger general-purpose models. [[ZenML (2025) — 1,200 Production Deployments](https://www.zenml.io/blog/what-1200-production-deployments-reveal-about-llmops-in-2025)]
 
 ## Decision Framework
 

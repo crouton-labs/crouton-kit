@@ -62,12 +62,35 @@ Each design option or state is rendered as a **full-fidelity app frame** — not
 ### Show Every Meaningful State
 
 Don't just show the happy path. Render:
-- **Idle/empty** — what it looks like when the feature is inactive (zero noise)
+- **Default/empty** — first-run, zero data, nothing configured yet (see below)
+- **Loading** — skeletons or spinners where async data lands
 - **Active** — the primary visible state
 - **Edge cases** — urgency levels, error states, disabled items, overflow
 - **Interaction states** — hover, selected, expanded (render these statically in parallel, not behind a click)
 
 Label each state with a small-caps state label inside the mockup section ("State 1 — At Rest", "State 2 — Expanded"). The label answers "what triggered this view?" in one line.
+
+### Default and Empty States
+
+The default state is where users spend their first session and where the feature looks broken if you skip it. Always mock it. For every list, table, chart, panel, or container that holds data, show what renders when the data isn't there yet.
+
+Cover these defaults as applicable:
+
+- **First-run / zero-config** — the feature exists but the user hasn't set it up. Include a one-line explanation of what this feature does and a single primary CTA ("Connect a source", "Create your first workspace"). No pretend data, no ghost rows.
+- **Empty after filter/search** — user actions produced no results. Echo the query ("No results for 'foo'") and offer a way out (clear filters, broaden search). Visually distinct from first-run empty — this is a dead end, not a starting line.
+- **Loading / skeleton** — grey blocks at the exact shape of the real content. Same height, same column count, same rhythm. Never a centered spinner on an empty page unless the whole route is blocked.
+- **Partial / degraded** — some data loaded, some failed. Show what you have, mark what you don't (inline "Unavailable" chip, not a full-page error).
+- **Error** — request failed. Include the reason in plain language and a retry affordance. Not a stack trace, not a generic "Something went wrong."
+- **Permission denied / locked** — the user can see the feature exists but can't use it. Show the locked state with the unlock path (upgrade, request access, log in).
+- **End-of-list / all-done** — positive terminal state for inboxes, task lists, feeds ("You're caught up"). Cheerful but not noisy.
+
+### Empty-State Anti-Patterns
+
+- **Skipping the empty state entirely** — reviewers assume the feature ships broken on day one
+- **Filler rows** — fake "Example item" placeholders that a user might mistake for real data or, worse, try to click
+- **Giant illustrations with no next step** — a friendly mascot is not a substitute for a CTA
+- **Same visual as error state** — empty ≠ broken; don't reuse a red/warning treatment for "no data yet"
+- **Hiding the chrome** — the surrounding shell (header, nav, filters) should still render, so users understand where they are
 
 ### Disabled and Inactive States
 

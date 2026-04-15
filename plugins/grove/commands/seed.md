@@ -83,7 +83,7 @@ A copy without installed dependencies and generated code won't start. The instal
 
 ## Step 4: Generate config.json
 
-Synthesize Agent 1 and Agent 3 findings. Create `.claude/grove/` if it doesn't exist:
+Synthesize Agent 1, 2, and 3 findings. Create `.claude/grove/` if it doesn't exist:
 
 ```bash
 mkdir -p <source-path>/.claude/grove
@@ -98,72 +98,62 @@ Write `<source-path>/.claude/grove/config.json`:
   "ports": {
     "<service>": { "base": <N>, "offset": <N> }
   },
+  "repos": {
+    "<repo-dir>": { "branch": "main", "recurseSubmodules": false }
+  },
   "excludes": ["node_modules", ".next", "dist", ".turbo", ".cache"],
-  "setupHandlesCopy": false
+  "copyFromSource": [
+    { "from": ".claude" },
+    { "from": "<subdir>/.env" },
+    { "from": "<subdir>/tenant-config.json" }
+  ],
+  "patchPortsIn": [
+    ".claude/**/*.md",
+    ".claude/**/*.sh",
+    ".claude/**/*.json",
+    ".claude/**/*.yaml",
+    ".claude/**/*.yml",
+    "**/.env",
+    "**/.env.*",
+    "**/tenant-config.json"
+  ],
+  "install": [
+    { "dir": "<subdir>", "cmds": ["pnpm install --frozen-lockfile", "pnpm exec prisma generate"] }
+  ]
 }
 ```
 
+Field guide:
 - `name` — derive from directory name or package.json `name` field
 - `ports` — one entry per service found by Agent 1; use `offset: 1` for debug/CDP ports, `offset: 100` for everything else
-- `excludes` — extend the defaults with any project-specific build artifacts Agent 3 identified
-- `setupHandlesCopy` — set `true` only if the project has a custom clone/copy strategy (rare)
+- `repos` — only for multi-repo projects where the source contains multiple git repos as subdirectories. Omit for single-repo projects (grove uses rsync).
+- `excludes` — extend the defaults with any project-specific build artifacts Agent 3 identified. Only applies to rsync copy (ignored when `repos` is set).
+- `copyFromSource` — untracked files that git clone won't include: `.env`, `.yalc`, `dist/`, config files. Set `"patchPorts": true` on entries that need port substitution after copy. Omit for rsync-copied projects (rsync copies everything).
+- `patchPortsIn` — glob patterns for files where grove should auto-replace base port numbers with computed ports. Uses `(?<!\d)BASE(?!\d)` regex. Covers `.env` patching, `.claude/` directory patching, and config file patching — all declaratively. Always include `.claude/` globs.
+- `install` — per-directory install commands. Include codegen like `prisma generate` that doesn't depend on a running database.
 
 ---
 
-## Step 5: Generate setup.sh
+## Step 5: Generate setup.sh (if needed)
 
-Create `<source-path>/.claude/grove/setup.sh` based on Agent 1, 2, and 3 findings. The script must be project-specific — fill in the actual .env file paths, port variable names, service directories, and codegen commands discovered. Do not generate a no-op shell of comments.
+Most projects don't need a setup.sh — config.json handles port patching, file copying, and dependency installation declaratively. Only generate setup.sh for project-specific logic that config can't express:
 
-The script must:
-- Accept `--mode full|post-copy --source <path> --target <path> --slot <N> --name <name>` args
-- Read `GROVE_PORT_*` env vars (set by grove CLI before calling the script)
-- Patch `.env` files: update `PORT=`, `*_URL=`, `DATABASE_URL`, `CORS_ORIGINS` with values from env vars
-- Patch `.claude/` directory: find-and-replace base port numbers with slot ports in `.md`, `.sh`, `.json`, `.yaml` files
-- Patch other config files (`tenant-config.json`, `docker-compose.yml`, etc.) if applicable
-- Install dependencies per service directory
-- Run codegen (`prisma generate`, GraphQL codegen, etc.) if applicable
-- Be idempotent — safe to re-run
+- Database creation/migration/seeding
+- Appending computed env vars to files (e.g., slot-specific app names, protocol schemes)
+- Copying and patching binary artifacts from source
+- Conditional logic based on env var presence
 
-Template structure (replace all placeholder comments with actual project-specific commands):
+If setup.sh is needed, create `<source-path>/.claude/grove/setup.sh`. The script receives all context via env vars — no argument parsing needed:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --mode) MODE="$2"; shift 2 ;;
-    --source) SOURCE="$2"; shift 2 ;;
-    --target) TARGET="$2"; shift 2 ;;
-    --slot) SLOT="$2"; shift 2 ;;
-    --name) NAME="$2"; shift 2 ;;
-    *) shift ;;
-  esac
-done
+# All context via env vars set by grove:
+#   GROVE_SOURCE, GROVE_TARGET, GROVE_SLOT, GROVE_INSTANCE_NAME
+#   GROVE_PORTS_JSON, GROVE_PORT_CORE, GROVE_PORT_API, etc.
 
-# Also available via env: GROVE_SLOT, GROVE_SOURCE, GROVE_TARGET,
-# GROVE_INSTANCE_NAME, GROVE_PORT_*, GROVE_PORTS_JSON
-TARGET="${TARGET:-${GROVE_TARGET:-}}"
-SOURCE="${SOURCE:-${GROVE_SOURCE:-}}"
-SLOT="${SLOT:-${GROVE_SLOT:-}}"
-
-CONFIG_FILE="$(dirname "$0")/config.json"
-
-# --- .env patching ---
-# Update each .env file with slot-computed port values from GROVE_PORT_* vars
-
-# --- .claude/ port patching ---
-# Find-replace base ports with computed ports in .claude/ files
-
-# --- config file patching ---
-# Update tenant-config.json, docker-compose.yml, etc. if present
-
-# --- dependency installation ---
-# Run package manager install per service directory
-
-# --- codegen ---
-# Run prisma generate, GraphQL codegen, etc.
+# --- project-specific logic here ---
 ```
 
 Make the script executable:
@@ -171,6 +161,8 @@ Make the script executable:
 ```bash
 chmod +x <source-path>/.claude/grove/setup.sh
 ```
+
+If the project needs no custom logic beyond what config.json declares, skip this step entirely.
 
 ---
 

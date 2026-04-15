@@ -58,7 +58,14 @@ Parse the `--- grove-output ---` JSON block from stdout. It contains:
 - `ports` — computed port mappings per service
 - `source` — source project path
 
-The CLI automatically runs `.claude/grove/setup.sh` with `GROVE_PORT_*` environment variables. Check the output for any setup script warnings or errors.
+The CLI handles all config-driven setup automatically:
+- Clones repos or rsync copies source
+- Copies files from source (`copyFromSource`)
+- Patches port references in matching files (`patchPortsIn`)
+- Installs dependencies (`install`)
+- Runs `setup.sh` last (if present) for custom logic
+
+Check the output for any setup warnings or errors.
 
 ---
 

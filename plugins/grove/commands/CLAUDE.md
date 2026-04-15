@@ -10,8 +10,8 @@
 
 `/seed` runs **three parallel discovery agents** on a source project and outputs two files into `.claude/grove/`:
 
-- `config.json` — port definitions, excludes, and metadata. Used by `grove register --from-config` and read by `setup.sh` for base port values.
-- `setup.sh` — post-plant script that patches .env files, .claude/ directory port references, config files, installs dependencies, and runs codegen.
+- `config.json` — port definitions, repo specs, copy/patch/install declarations. The CLI processes these declaratively during `grove plant`.
+- `setup.sh` — optional script for custom logic that config can't express (DB creation, binary patching, etc.). Most projects don't need one.
 
 After seeding, the user commits `.claude/grove/` and teammates run `/grove:plant` with no discovery step.
 
@@ -23,9 +23,13 @@ If `.claude/grove/config.json` already exists, `/seed` asks before overwriting.
 
 **Seeded path (config exists):**
 1. Register via `grove register <source> --from-config` if not already registered
-2. Run `grove plant`
-3. The CLI automatically invokes `setup.sh` with `GROVE_PORT_*` env vars — no manual patching steps
-4. Lightweight verification and report
+2. Run `grove plant` — the CLI handles everything declaratively:
+   - Clones repos (if `repos` defined) or rsync copies
+   - Copies files from source (`copyFromSource`)
+   - Patches port references (`patchPortsIn`) — auto-derives replacements from port definitions
+   - Installs dependencies (`install`)
+   - Runs `setup.sh` last (if present) for custom logic
+3. Lightweight verification and report
 
 **Discovery path (no config):**
 1. Run **three parallel discovery agents** (same agents as `/seed` Step 3)
@@ -42,8 +46,8 @@ Projects that have been seeded contain:
 
 ```
 .claude/grove/
-  config.json   — port definitions, excludes, name, version
-  setup.sh      — idempotent post-plant setup script
+  config.json   — port definitions, repo specs, copy/patch/install declarations
+  setup.sh      — optional script for custom logic (env-var driven, no args)
 ```
 
 `config.json` schema:
@@ -55,15 +59,26 @@ Projects that have been seeded contain:
     "<service>": { "base": <N>, "offset": <N> }
   },
   "excludes": ["node_modules", ".next", "dist", ...],
-  "setupHandlesCopy": false
+  "repos": {
+    "<repo-dir>": { "branch": "main", "recurseSubmodules": false }
+  },
+  "copyFromSource": [
+    { "from": "<path>", "to": "<path>", "patchPorts": false }
+  ],
+  "patchPortsIn": [".claude/**/*.md", "**/.env", "**/.env.*"],
+  "install": [
+    { "dir": "<subdir>", "cmds": ["pnpm install --frozen-lockfile"] }
+  ]
 }
 ```
 
-`setup.sh` is called by the grove CLI as:
-```
-setup.sh --mode full|post-copy --source <path> --target <path> --slot <N> --name <name>
-```
-The CLI also sets `GROVE_SLOT`, `GROVE_SOURCE`, `GROVE_TARGET`, `GROVE_INSTANCE_NAME`, `GROVE_PORT_<SERVICE>`, and `GROVE_PORTS_JSON` in the environment before calling the script.
+Config-driven setup fields (all optional, processed in order by `grove plant`):
+- `repos` — multi-repo clone definitions. Replaces rsync for projects with multiple git repos.
+- `copyFromSource` — files/dirs to copy from source (untracked files like `.env`, `.yalc`, `dist/`). `patchPorts: true` applies port substitution after copy.
+- `patchPortsIn` — glob patterns for automatic port substitution. Uses `(?<!\d)BASE(?!\d)` regex to replace base port numbers with computed ports. Skips `grove/config.json`.
+- `install` — per-directory install commands.
+
+`setup.sh` runs last. All context is passed via env vars: `GROVE_SLOT`, `GROVE_SOURCE`, `GROVE_TARGET`, `GROVE_INSTANCE_NAME`, `GROVE_PORT_<SERVICE>`, `GROVE_PORTS_JSON`.
 
 ## `grove register` flags
 
@@ -81,7 +96,7 @@ Use `offset: 1` for debug/CDP ports (9222, 9229) so slot 2 → 9223, slot 3 → 
 
 ## Most-missed post-plant step (discovery path only)
 
-Step 10b (`.claude/` directory patching) is explicitly the most commonly missed in the discovery path. After planting, find-replace base port numbers across `.md`, `.sh`, `.json`, `.yaml` files in the target's `.claude/` directory. Stale ports here cause Claude sessions in the new instance to silently operate on the original instance's services. Seeded projects handle this in `setup.sh`.
+Step 10b (`.claude/` directory patching) is explicitly the most commonly missed in the discovery path. After planting, find-replace base port numbers across `.md`, `.sh`, `.json`, `.yaml` files in the target's `.claude/` directory. Stale ports here cause Claude sessions in the new instance to silently operate on the original instance's services. Seeded projects handle this via the `patchPortsIn` config field.
 
 ## `/adopt` slot detection
 

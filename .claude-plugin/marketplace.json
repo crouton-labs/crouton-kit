@@ -194,6 +194,19 @@
         "tmux",
         "diagrams"
       ]
+    },
+    {
+      "name": "grove",
+      "source": "./plugins/grove",
+      "description": "Manage parallel project instances — plant, adopt, uproot, and monitor isolated copies",
+      "version": "1.0.0",
+      "keywords": [
+        "instances",
+        "parallel",
+        "environments",
+        "ports",
+        "isolation"
+      ]
     }
   ]
 }

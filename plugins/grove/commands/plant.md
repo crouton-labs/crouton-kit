@@ -1,5 +1,5 @@
 ---
-description: Create a parallel instance — discovers ports, registers if needed, plants, and configures everything
+description: Create a parallel instance — auto-configures seeded projects, discovers ports for new ones
 allowed-tools: Bash(*), Read, Glob, Grep, Agent
 argument-hint: <source-path> <instance-name> [--slot N]
 ---
@@ -8,9 +8,7 @@ argument-hint: <source-path> <instance-name> [--slot N]
 
 **Arguments:** $ARGUMENTS
 
-Create an isolated parallel instance of a project with automatic port allocation. Handles the full lifecycle: codebase discovery, grove registration, planting, and post-plant configuration.
-
-**Why this is hard:** Running two copies of the same project means every port, URL, database name, and protocol scheme must be unique per instance. Port references hide in dozens of places beyond .env files — slash commands, automation scripts, proxy configs, OAuth callbacks, Electron app identities. Missing even one causes the new instance to silently talk to the original's services.
+Create an isolated parallel instance of a project with automatic port allocation. Seeded projects (those with `.claude/grove/config.json`) skip discovery and let the CLI handle all post-plant configuration via `setup.sh`. Unseeded projects go through full discovery.
 
 ## Step 1: Parse arguments and check registration
 
@@ -25,12 +23,74 @@ Check if the project is already registered:
 grove list
 ```
 
-**If already registered** → skip to Step 4.
-**If not registered** → continue to Step 2.
+---
+
+## Step 2: Check for grove config
+
+```bash
+test -f <source-path>/.claude/grove/config.json && echo "SEEDED" || echo "NOT_SEEDED"
+```
+
+**If SEEDED** → continue to Step 3 (fast path).
+**If NOT_SEEDED** → skip to Step 7 (legacy path).
 
 ---
 
-## Step 2: Codebase Discovery (unregistered projects only)
+## Step 3: Register if needed (seeded projects)
+
+If the project was not in `grove list` output:
+
+```bash
+grove register <source-path> --from-config
+```
+
+---
+
+## Step 4: Plant
+
+```bash
+grove plant <project> <instance-name> [--slot N]
+```
+
+Parse the `--- grove-output ---` JSON block from stdout. It contains:
+- `target` — new instance directory path
+- `slot` — assigned slot number
+- `ports` — computed port mappings per service
+- `source` — source project path
+
+The CLI automatically runs `.claude/grove/setup.sh` with `GROVE_PORT_*` environment variables. Check the output for any setup script warnings or errors.
+
+---
+
+## Step 5: Verify
+
+- Target directory exists
+- No stale base port references remain in `.claude/` files:
+  ```bash
+  grep -rl ':<base_port>' <target>/.claude/ 2>/dev/null
+  # Should return empty for each base port
+  ```
+- `.env` port values match slot-computed values from the grove-output JSON
+
+---
+
+## Step 6: Report
+
+Output a summary with:
+- Instance path, slot number, project name
+- Port assignments per service
+- What setup.sh configured automatically
+- Any warnings from setup.sh output
+
+---
+
+## Discovery Path (unseeded projects)
+
+> **Tip:** Run `/grove:seed <source-path>` first to make this project portable for your team. It generates `.claude/grove/config.json` and `setup.sh` so future plants skip discovery entirely.
+
+---
+
+## Step 7: Codebase Discovery (unseeded projects only)
 
 Launch **three parallel explore agents** to analyze the source project. Each agent reports findings concisely.
 
@@ -87,18 +147,18 @@ A copy without installed dependencies and generated code won't start. The instal
 
 ---
 
-## Step 3: Register
+## Step 8: Register
 
 Based on discovery findings:
 
-### 3a. Determine port specs
+### 8a. Determine port specs
 
 For each service, define `name:base:offset`:
 - Default offset is `100` (slot 1 → +100, slot 2 → +200)
 - Use offset `1` for debug ports like CDP (9222 → 9223, 9224, ...)
 - Use offset `100` for everything else unless ports would collide
 
-### 3b. Fix hardcoded ports in source (if any)
+### 8b. Fix hardcoded ports in source (if any)
 
 Hardcoded ports can't be patched during plant — they need to be fixed in the source so all future instances work. If Agent 2 found hardcoded ports that should be env-var driven, **list them and ask** before modifying source. Common fixes:
 - `const PORT = 3071` → `parseInt(process.env.GALLERY_API_PORT ?? '3071', 10)`
@@ -106,11 +166,11 @@ Hardcoded ports can't be patched during plant — they need to be fixed in the s
 - Docker Compose hardcoded host ports → `${VAR:-default}:container_port`
 - Add missing port variables to `.env.example`
 
-### 3c. Check for init script
+### 8c. Check for init script
 
 Look for `.claude/scripts/create-*-env.sh` or similar in the source. If one exists, use it with `--init`. If the project is complex (monorepo, multiple services, database isolation) and has no init script, flag this — the user may want to create one before proceeding.
 
-### 3d. Register
+### 8d. Register
 
 ```bash
 grove register <source-path> --name <project-name> \
@@ -122,7 +182,7 @@ grove register <source-path> --name <project-name> \
 
 ---
 
-## Step 4: Plant
+## Step 9: Plant
 
 ```bash
 grove plant <project> <instance-name> [--slot N]
@@ -136,37 +196,37 @@ Parse the `--- grove-output ---` JSON block from stdout. It contains:
 
 ---
 
-## Step 5: Post-Plant Setup
+## Step 10: Post-Plant Setup
 
 If the project has an init script, it already handled most of this. Check its output to avoid duplicate work. Otherwise, do each of these:
 
-### 5a. Patch .env files
+### 10a. Patch .env files
 Update all `.env`, `.env.development`, `.env.local` files in the target with slot-computed ports. Patch:
 - `PORT=` lines
 - `*_URL=http://localhost:NNNN` references
 - `DATABASE_URL` — use slot-specific DB name if applicable
 - `CORS_ORIGINS` with updated port numbers
 
-### 5b. Patch .claude/ directory
+### 10b. Patch .claude/ directory
 Find-and-replace base port numbers with slot ports across all `.md`, `.sh`, `.json`, `.yaml` files in `.claude/`. This is the most commonly missed step — stale ports in the new instance's slash commands and scripts cause Claude sessions to operate on the original instance's services without any visible error.
 
-### 5c. Patch config files
+### 10c. Patch config files
 Update `tenant-config.json`, `docker-compose.yml`, and similar with slot ports.
 
-### 5d. Install dependencies
+### 10d. Install dependencies
 Run the appropriate package manager install in each service directory. Watch for:
 - Private registry tokens that need exporting
 - `--frozen-lockfile` for reproducibility
 - Post-install hooks that need specific env vars
 
-### 5e. Run codegen and migrations
+### 10e. Run codegen and migrations
 - Prisma: `prisma generate` then `prisma migrate deploy`
 - Create slot-specific databases if needed
 - Any other codegen (GraphQL, OpenAPI, etc.)
 
 ---
 
-## Step 6: Verify and Report
+## Step 11: Verify and Report
 
 ### Verification checks
 

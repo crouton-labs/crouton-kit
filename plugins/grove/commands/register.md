@@ -37,3 +37,19 @@ Point to a script that sets up new instances. Grove calls it with `<source> <tar
 ```
 --init .claude/scripts/create-env.sh
 ```
+
+## Auto-load from config
+
+If the project has `.claude/grove/config.json` (created by `/grove:seed`):
+
+```bash
+grove register <path> --from-config
+```
+
+This reads port definitions, name, excludes, and setup script from the config file. Explicit flags override config values.
+
+To update an existing registration:
+
+```bash
+grove register <path> --from-config --update
+```

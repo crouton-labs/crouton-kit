@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: General-purpose prompt. Pass any task description.
 ---

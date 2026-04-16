@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Investigate codebase for a feature, produce high-level spec with open questions. Human resumes session to iterate.
 ---

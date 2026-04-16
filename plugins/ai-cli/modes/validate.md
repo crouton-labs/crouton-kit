@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Validate that a plan phase was implemented correctly. Runs checks, outputs PASS or failure report.
 ---

@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Validate plan against spec. Checks coverage, identifies missing requirements, flags ambiguities that would block implementation.
 ---

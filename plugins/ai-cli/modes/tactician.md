@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Implementation orchestrator — reads plan + spec, marks progress, dispatches next implementation or validation task.
 ---

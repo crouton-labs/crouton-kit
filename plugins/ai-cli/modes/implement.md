@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Execute a specific phase or task from an implementation plan. Full codebase access.
 ---

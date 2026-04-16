@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Pass file paths, a directory, or leave blank for uncommitted changes. Optionally specify focus areas.
 ---

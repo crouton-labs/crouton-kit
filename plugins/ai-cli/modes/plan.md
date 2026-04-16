@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Create implementation plan from spec. Investigates codebase, determines complexity, produces plan with phases and file-level detail.
 ---

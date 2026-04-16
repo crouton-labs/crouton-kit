@@ -53,7 +53,7 @@ A `## Prompt Wrapper` heading defines a template applied to the user's `-p` argu
 
 ```markdown
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 ---
 

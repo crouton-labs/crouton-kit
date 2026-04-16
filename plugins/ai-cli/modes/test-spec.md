@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Write a behavioral test spec — defines properties to prove, not concrete tests. Used by validators to adversarially verify implementation.
 ---

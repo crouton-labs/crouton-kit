@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: opus
 system-prompt-mode: append
 help: Describe the bug and include file paths. Give lots of context, but don't bias the agent toward a cause.
 ---

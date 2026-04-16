@@ -100,6 +100,42 @@ For multi-line commands, open a fenced code block with three backticks followed 
 
 This is preprocessing, not tool use — bundled and managed skills aren't affected by `disableSkillShellExecution`, but user/project/plugin skills are.
 
+## Skill vs Reference Manual
+
+The litmus test: **does this teach judgment or describe an API?**
+
+A skill helps someone who doesn't know *what to do* — it provides decision frameworks, heuristics, and principles they can reason from. A reference manual helps someone who already knows what to do but forgot *how* — it provides API surfaces, tables, and exhaustive listings.
+
+If your SKILL.md reads like a man page, you've written a reference doc wearing a skill's clothes. Extract the reference material to `reference.md` and rewrite SKILL.md around the decisions.
+
+**Skill markers:**
+- Teaches a framework for thinking about a class of problems
+- Includes "when to use" and "when not to use"
+- Someone unfamiliar with the domain makes better decisions after reading it
+- Prose over tables — heuristics compose, lookup rows don't
+
+**Reference markers:**
+- Lists API surfaces, event taxonomies, or CLI commands
+- Assumes the reader already knows *why* they're here
+- Tables and code examples dominate
+- No decision frameworks
+
+Most skills need both — SKILL.md for the judgment layer, `reference.md` for the lookup layer. The mistake is combining them.
+
+## Writing for Token Efficiency
+
+LLM reasoning degrades as context grows — research shows meaningful accuracy drops around 3k tokens. Every line in a skill competes for attention with the rest of the agent's context.
+
+**Budget ~150 lines for SKILL.md.** This forces density.
+
+- Lead with the decision, not the mechanism. "When you need X" before "how X works."
+- If a section exceeds 20 lines without teaching judgment, move it to `reference.md`.
+- Tables are expensive — a 3-line prose summary often teaches the same thing as a 25-row table.
+- Example reasoning chains > example outputs. Show *how to think*, not *what to produce*.
+- One well-placed "don't" prevents more bad behavior than three paragraphs of explanation.
+
+**The test:** Can someone reading your SKILL.md for 30 seconds make a better decision than they would without it? If they have to read the whole thing to get value, you've buried the judgment.
+
 ## Progressive Disclosure
 
 Keep SKILL.md under 500 lines. Put detailed reference in supporting files:

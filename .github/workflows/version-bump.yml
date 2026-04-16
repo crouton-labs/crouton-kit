@@ -27,14 +27,17 @@ jobs:
 
       - name: Determine version bump type
         id: bump-type
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          # Only check the first line (subject) of the commit message
+          SUBJECT=$(echo "$COMMIT_MSG" | head -1)
 
           # Check for breaking change
-          if echo "$COMMIT_MSG" | grep -qE '^[a-z]+(\(.+\))?!:|BREAKING CHANGE:'; then
+          if echo "$SUBJECT" | grep -qE '^[a-z]+(\(.+\))?!:|BREAKING CHANGE:'; then
             echo "type=major" >> $GITHUB_OUTPUT
           # Check for feature
-          elif echo "$COMMIT_MSG" | grep -qE '^feat(\(.+\))?:'; then
+          elif echo "$SUBJECT" | grep -qE '^feat(\(.+\))?:'; then
             echo "type=minor" >> $GITHUB_OUTPUT
           # Default to patch for fix, chore, docs, refactor, etc.
           else

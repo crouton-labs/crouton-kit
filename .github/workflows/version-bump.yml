@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 50
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -44,8 +44,13 @@ jobs:
       - name: Get changed files
         id: changed-files
         run: |
-          # Get list of changed files
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          # Find the last CI bump commit to diff against (catches all commits since last bump)
+          LAST_BUMP=$(git log --format=%H --grep='\[skip ci\]' -1 HEAD~ 2>/dev/null || true)
+          if [ -z "$LAST_BUMP" ]; then
+            # No prior bump found, fall back to parent
+            LAST_BUMP="HEAD~1"
+          fi
+          CHANGED=$(git diff --name-only "$LAST_BUMP" HEAD)
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT

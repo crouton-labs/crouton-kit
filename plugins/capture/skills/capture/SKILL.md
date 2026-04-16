@@ -25,8 +25,10 @@ When validating a UI feature:
 3. Interact via `click` and `type` using accessible names (not selectors)
 4. Take screenshots at key states
 5. Use `exec` to check DOM or JS state when a11y isn't sufficient
-6. Use `har read` to verify network requests if relevant
+6. Use `har read` to verify network requests if relevant (supports `--filter-url`, `--filter-status`, `--filter-method`, `--limit`; ID optional in an active session)
 7. Stop the session and report pass/fail with evidence
+
+**HAR caveat:** the session HAR is populated by the commands that run — most reliably `navigate`. `click`/`type` capture the traffic that fires inside their settle window, but cross-navigation traffic after the frame changes is lossy. For continuous "click around" capture, run `capture record --duration N` in parallel.
 
 ## Interaction Tips
 

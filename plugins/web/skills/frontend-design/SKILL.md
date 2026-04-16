@@ -7,6 +7,12 @@ This skill guides creation of distinctive, production-grade frontend interfaces 
 
 The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
 
+## When Not to Use This Skill
+
+- **Internal tools / admin panels** — functionality matters more than aesthetics. Use `interface-design` instead.
+- **Matching an existing design system** — this skill creates distinctive new aesthetics. If you're implementing Figma mocks or extending an existing design language, just follow the system.
+- **Performance-critical pages** — the animations, custom fonts, and layered effects this skill produces add weight. For pages where load time is the feature, skip the creative flourishes.
+
 ## Design Thinking
 
 Before coding, understand the context and commit to a BOLD aesthetic direction:

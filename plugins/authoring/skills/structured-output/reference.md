@@ -404,6 +404,18 @@ z.string().refine(s => s !== "unknown" && s !== "N/A", "Must be a specific value
 
 ---
 
+## How Constrained Decoding Works
+
+Willard & Louf (2023) — the Outlines paper — established the canonical mechanism:
+
+1. Compile the JSON schema → FSM (or PDA for recursive/nested schemas)
+2. Pre-build a token mask index: for each FSM state, which vocabulary tokens are valid?
+3. At each decode step: look up current state → apply mask → zero invalid logits → sample
+
+OpenAI added this in August 2024 (with model fine-tuning on top); Anthropic went GA in late 2025. Both cache compiled grammars — Anthropic for 24 hours, OpenAI persistently by schema hash. First use adds 100–300ms (Anthropic) to latency. Open-source stacks (vLLM, SGLang) use XGrammar, which achieves <40µs per token via offline pre-classification of context-independent vocabulary tokens.
+
+---
+
 ## Sources
 
 - [Willard & Louf (2023) — Efficient Guided Generation for LLMs (Outlines)](https://arxiv.org/abs/2307.09702)

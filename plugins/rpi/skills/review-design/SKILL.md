@@ -13,6 +13,8 @@ Parse input to extract design path and requirements path. Expected format: `{des
 
 ## Phase 1: Requirements Coverage
 
+Designs that skip requirements produce elegant architectures that solve the wrong problem.
+
 Spawn a Task agent to verify the design addresses all requirements:
 
 Task tool parameters:
@@ -75,6 +77,8 @@ If no gaps: `PASS — flow simulation found no gaps.`
 
 ## Phase 3: Feasibility Review
 
+A design can cover all requirements and flow correctly but still be unbuildable — incompatible with existing patterns, impossible data model, or components that can't actually connect.
+
 Spawn a Task agent to check architectural feasibility:
 
 Task tool parameters:
@@ -112,6 +116,8 @@ Task tool parameters:
     - **{issue}** — {what's wrong or incompatible} → {what would break during implementation}
 
 ## Phase 4: Aggregate
+
+Multiple phases catching the same gap is signal — those are the issues most likely to cause implementation failure.
 
 Collect results from all phases. Drop PASS results.
 

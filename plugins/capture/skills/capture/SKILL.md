@@ -6,47 +6,15 @@ allowed-tools: Bash(capture:*), Read, Glob, Grep
 
 # Capture — Browser Automation Skill
 
-Use the `capture` CLI to observe, interact with, and validate browser state via CDP.
+Browser automation via CDP for UI validation. For the full command reference, see [cli-reference.md](cli-reference.md).
 
-## CLI Quick Reference
+## Session Basics
 
-```
-capture session start [--url <url>]    Start session (opens tab, sets context)
-capture session stop <session-id>      Finalize and bundle artifacts
-capture session view <id>              View bundle manifest
-
-capture detect                         Detect CDP port
-capture list                           List browser tabs
-capture open <url> [--new]             Open URL in browser
-capture navigate <url> [--settle <ms>] Navigate + record HAR
-capture screenshot [--out <path>]      Capture screenshot
-capture a11y [--interactive] [--json]  Get accessibility tree
-capture click "name" [--role role]     Click element by accessible name
-capture type "text" [--into "field"]   Type into focused element or named field
-capture exec <code>                    Execute JS in browser tab
-capture exec --file <path>             Execute JS from file
-capture record [--duration <secs>]     Passive HAR recording
-capture log <path> [--name label]      Tail a log file into the session
-capture network <offline|online>       Toggle network (simulate disconnect)
-capture har create|read|delete         Manage HAR recordings
-```
-
-## Session Workflow
-
-1. `capture session start --url <url>` — opens tab, starts HAR, sets active session
+1. `capture session start --url <url>` — open a tab and start recording
 2. Interact: `screenshot`, `click`, `type`, `a11y`, `exec`, `navigate`
-3. `capture session stop <id>` — bundles screenshots + HAR + a11y snapshots
-4. `capture session view <id>` — inspect the bundle
+3. `capture session stop <id>` — bundle artifacts; `capture session view <id>` to inspect
 
-**Session context auto-fills `--target` and `--har`** after `session start`. No manual flag threading.
-
-## Key Behaviors
-
-- **Targeting**: `--target <id>` (preferred, parallel-safe) or `--url <pattern>` (fuzzy match). Target IDs support **prefix matching** — use the first 8 characters instead of the full ID (e.g. `--target 6d82f8c1`).
-- **Auto-screenshots**: `click` and `type` save numbered screenshots to the session automatically. Use `--no-screenshot` to skip.
-- **HAR recording**: Use `--har <id>` with `exec` or `navigate` to append network traffic. Or `--record` with `exec` for standalone HAR.
-- **exec supports await**: `capture exec 'await fetch("/api/data").then(r => r.json())'`
-- **Any command supports `--help`**
+Session context auto-fills `--target` and `--har` — no manual flag threading needed.
 
 ## Validation Pattern
 

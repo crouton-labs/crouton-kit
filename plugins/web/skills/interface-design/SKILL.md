@@ -201,6 +201,53 @@ Your palette should feel like it came FROM somewhere — not like it was applied
 
 ---
 
+# Monitoring & Configuration Interfaces
+
+Patterns for dashboards, admin panels, and tools where users oversee automated processes, configure rules, or inspect system behavior.
+
+## Status Panels
+
+Status is the first thing users check. Design for instant comprehension:
+
+- **State indicators** — Idle, running, paused, errored. Hardware buttons (Dieter Rams) are a strong reference for on/off controls that feel solid and intentional
+- **Destructive action protection** — Pair power/pause/stop controls with either blocking confirmation ("Are you sure?") or undo patterns. Pick one per product and be consistent
+- **Liveness signals** — Last-run timestamp, heartbeat indicator, or activity sparkline. Static status labels without temporal context ("Running") don't answer "is it actually working right now?"
+
+## Activity Logs & Trace Visualization
+
+Users debug chronologically. Design for progressive disclosure from overview to individual step:
+
+- **Timeline as primary structure** — reverse-chronological, each entry showing trigger, outcome, duration. Datadog and Zapier traces are strong references
+- **Expandable task detail** — click a mission/run to see its constituent tasks with input/output at each node. The trace view is a debugging tool — optimize for scanning, not aesthetics
+- **Differentiate task types visually** — triggers, reasoning steps, tool calls, human-in-the-loop handoffs, errors. Icon + color coding, not just labels
+- **Header KPIs per run** — success/failure badge, duration, task count, cost. Users need to triage before they inspect
+
+## Rule Builder & Trigger Configuration
+
+Three structural patterns for letting users define automation rules, in ascending complexity:
+
+1. **Natural language** — A text field where users describe conditions in prose ("When marketing spend exceeds 90% of budget, alert finance"). Easy to start, hard to validate. Design warnings for when mandatory parameters are missing from the prose
+2. **Linear flow** — IFTTT-style sequential blocks: source → condition → action. Each node is a discrete configuration step. Users can start from scratch or from a template. Easy to understand because it's sequential
+3. **2D map** — n8n-style canvas with branches and dependencies. Required when workflows have parallel paths or conditional branching. Highest power, highest learning curve
+
+Regardless of pattern, triggers decompose into **key** (what you're watching), **operator** (`<`, `>`, `=`, `!=`, `contains`), and **value** (threshold). Support `AND` / `OR` combinators and throttling controls for frequency/cost management.
+
+### Confidence Before Activation
+
+- **Backtesting** — Simulate rules against historical data: "This rule would have fired 23 times last week." Borrowed from quantitative trading. Essential for any configurable automation
+- **Save-as-draft** — Complex conditions take multiple sessions to perfect. Support drafts, versioning, rollback, and enable/disable toggles independently from save state
+
+## Integration Catalogs
+
+When users browse and connect data sources or tools:
+
+- **Catalog pattern** — Categorized grid/list of available integrations. For large catalogs, add category pages, filters, and search. App Store is a strong reference
+- **Dedicated integration pages** — Name, category, status (connected/error/disabled), description of capabilities. Not just a toggle
+- **Setup guidance** — Step-by-step with anonymized examples. If code snippets are necessary, easy copy-paste. Stripe's documentation is the benchmark
+- **Connected sources list** — Once configured, users need a single view of all active integrations with status
+
+---
+
 # Design Principles
 
 ## Spacing

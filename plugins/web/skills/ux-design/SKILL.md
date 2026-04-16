@@ -1,6 +1,7 @@
 ---
 name: ux-design
 description: UX design principles, heuristics, and evaluation frameworks. Use when reviewing interface usability, planning user flows, evaluating designs against heuristics, or applying UX methodology to any product — web, mobile, CLI, or AI.
+effort: xhigh
 ---
 
 # UX Design Principles
@@ -16,6 +17,22 @@ Reference for evaluating and designing user experiences. Start here for framewor
 - [CLI & Terminal UX](references/cli-terminal-ux.md) — Command structure, output design, error messages, TUI patterns, scripting, composability
 - [UX for Onboarding & Empty States](references/onboarding-empty-states.md) — First-run experience, progressive disclosure, empty states, activation, returning users
 - [Error & Edge State Design](references/error-edge-states.md) — Error messages, prevention, form validation, loading failures, edge cases, destructive safeguards
+
+---
+
+## First Principles Before Frameworks
+
+Three gates before reaching for any established pattern:
+
+1. **What is the actual user goal?** Not the feature, not the screen — the verb. "Find the broken deployment" not "view the dashboard." If you can't state it as an action, you don't understand the problem yet.
+
+2. **Why does the current/conventional pattern exist?** Every UX convention solved a specific problem in a specific context. A sidebar nav solved "persistent access to many sections." If your product has 3 sections, that solved problem isn't yours. Name the original problem before inheriting the solution.
+
+3. **What would you build if the pattern didn't exist?** Strip away convention. Given this user, this goal, this context — what's the minimum interface? Sometimes the answer is the same as the convention. Often it isn't.
+
+**Failure mode: Pattern-first design.** You reach for a dashboard layout because the prompt said "dashboard." You add a sidebar because apps have sidebars. You use tabs because there are categories. Every choice was a pattern match, none was a design decision. The interface works but solves no specific problem well.
+
+**Self-check:** For each major structural choice, can you explain why it's right for *this* problem without referencing convention? "Users need X, this structure enables X" — not "dashboards typically have this."
 
 ---
 
@@ -135,6 +152,73 @@ For any screen or interaction:
 3. What feedback will they get?
 4. How do they recover from mistakes?
 5. What's the fastest path to their goal?
+
+---
+
+## Autonomous & Agent System UX
+
+Patterns for interfaces where humans oversee automated or semi-autonomous systems — background agents, pipelines, scheduled jobs, monitoring tools, approval workflows.
+
+### Information Hierarchy: Agents > Missions > Tasks
+
+Autonomous systems operate in layers. **Agents** have **missions** (goal-directed runs), missions contain **tasks** (discrete steps). Design navigation and detail views around this hierarchy — users zoom in from system status to individual task inspection.
+
+### Overview Panel
+
+The entry point. Users arrive not knowing what their system has been doing. Answer four questions immediately:
+
+1. **Current state** — Is the system idle, running, paused, errored? Use hardware-button-inspired status indicators with clear on/off affordances. Pair power controls with blocking confirmation or undo patterns to prevent accidental state changes.
+2. **Recent missions** — What completed recently? Treat as a project-management-style task list with status, duration, and outcome.
+3. **Pending human actions** — What's blocked waiting for me? This must be the most prominent element. When empty, design the empty state as a reward — users want "inbox zero."
+4. **Output KPIs** — How much work was done? Keep to 2-4 high-signal metrics. Tesla's instrument cluster is a good reference: a small number of KPIs with strong visual hierarchy.
+
+### Resolution Flow Taxonomy
+
+When an autonomous system needs human intervention, the interaction falls into one of five types. Each requires different UI:
+
+| Type | System State | User Action | UI Pattern |
+|------|-------------|-------------|------------|
+| **Communication** | Task succeeded but criticality warrants informing a human | None — read and dismiss | Notification with context summary |
+| **Validation** | Solution found but risk too high to auto-execute | Approve / reject | Tinder-style swipe or inline approve/reject with full context visible. Supports automatic chaining to next item |
+| **Decision** | Multiple valid resolutions identified | Choose one | Option cards or buttons with context and implications for each choice |
+| **Context** | Missing information the system cannot infer | Provide data | Informational context page leading to a focused form. Show WHY the information is needed |
+| **Error** | Tool failure, timeout, or unrecoverable state | Retry, ignore, or take over | Error explanation + recovery options + manual takeover path |
+
+Design each flow to maximize conversion rate: large CTAs, urgency markers, sufficient context to decide without leaving the page.
+
+### Notification Design
+
+Notifications bridge the system and the human. Get these wrong and oversight breaks down.
+
+- **Channel fit** — Match the medium (Slack, email, push, SMS) to user habits and urgency level
+- **Concise subjects** — 30-60 characters for subject/title, 50-120 for preview. Over half of emails are read in under 10 seconds
+- **Strategic triggering** — Don't bombard. Trigger on: action type required (validation, information, error), criticality level, or duration blocked. Batch low-priority notifications
+- **Landing page conversion** — The notification lands users on a resolution surface. For simple actions (yes/no), resolve inline. For complex actions, use the landing to provide context and a CTA into the full resolution flow
+
+### Activity Log & Trace Inspection
+
+Not every mission involves a human. The activity log is where users audit, debug, and build confidence.
+
+- **Reverse-chronological timeline** — most searches are for recent missions
+- **Rich labels** — show trigger source, tools used, outcome, duration. Users search by topic, not timestamp
+- **Filters and search** — missions accumulate fast
+- **Save and export** — analysis may happen elsewhere or across sessions
+- **Mission detail as trace** — users debug chronologically, task by task. Show each task's input, processing, and output. Datadog traces are a strong reference: expandable timeline with metadata at each node
+- **Header KPIs** — success/failure, duration/spend, task count by type
+
+### Minimum-Workload Oversight
+
+The goal of human oversight is amplification, not burden. Design principles:
+
+- Offer options instead of open-ended questions
+- Summarize instead of oversharing — the system should do the synthesis
+- Chain related tasks so humans stay in flow rather than context-switching
+- Show time-blocked (how long the system has waited) to communicate urgency without nagging
+- One person should be able to oversee the work of many agents
+
+### Backtesting as Confidence Pattern
+
+Before any automated rule goes live, let users simulate against historical data: "These conditions would have triggered 23 times last week." This is borrowed from quantitative trading and applies to any configurable automation — alert thresholds, trigger conditions, routing rules.
 
 ---
 

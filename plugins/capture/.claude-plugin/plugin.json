@@ -1,5 +1,5 @@
 {
   "name": "capture",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Generic app state capture — screenshots, HAR, console, logs via CDP"
 }

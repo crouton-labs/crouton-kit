@@ -16,6 +16,8 @@ Browser automation via CDP for UI validation. For the full command reference, se
 
 Session context auto-fills `--target` and `--har` — no manual flag threading needed.
 
+**Target selection:** If the user hasn't specified which app or browser to target, ask before starting. Don't assume Chrome, a specific port, or a running tab — run `capture detect` to see what's available and confirm with the user when ambiguous.
+
 ## Validation Pattern
 
 When validating a UI feature:

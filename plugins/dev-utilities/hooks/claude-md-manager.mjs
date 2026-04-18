@@ -285,16 +285,52 @@ function discoverGitRepos(cwd) {
   return repos;
 }
 
-const UPDATE_SIGNALS_BLOCK = `## Update signals
+const PRUNE_BLOCK = `## The bar: what content earns its place
 
-Rank what you see when deciding what to change:
+Keep or add a line only if ALL three hold:
+1. Without it, Claude produces **silently broken** code (not just suboptimal — broken)
+2. The trap is **not discoverable** in one pass of reading source, types, parent CLAUDE.md, or \`.claude/rules/\`
+3. The fix is **non-obvious** — Claude's default behavior would be wrong
 
-- **Deleted files and renamed symbols (highest)**: explicit overrides. Remove any CLAUDE.md content that references them.
-- **Divergent patterns in changed code**: a modified file contradicts a documented convention. Update or remove the convention.
-- **New constraints or gotchas**: the diff introduces a silent failure mode not yet documented. Add it.
-- **Mere absence is not contradiction**: existing CLAUDE.md content that today's diff simply doesn't touch is still valid. Do not remove it just because this session's changes didn't re-observe it.
+### What counts as "not discoverable"
 
-Stale is worse than missing. If a rule is contradicted by new evidence but you have no replacement, remove it anyway. A successful update may be purely removals — do not manufacture additions to justify running.`;
+These qualify as undiscoverable even though a reader *could* figure them out by tracing everything:
+
+- **Conditional guards / feature flags**: \`{{- if .Values.foo }}\` blocks, \`enabled\` flags, env-gated branches — which combinations render what is not visible without exercising each path
+- **Cross-file / cross-template coupling**: a flag in file A silently injects a value into file B; a secret name in one file must match a reference in another
+- **Nested optional keys**: removing an outer key silently drops all inner keys it guards, with no render error
+- **Asymmetric paths / names**: \`metadata.name\` vs \`spec.target.name\` mismatches, liveness \`/health\` vs readiness \`/health/ready\`, path-level security context vs container-level
+- **Silent null-path assertions**: test frameworks that pass against null when the asserted path doesn't exist
+
+If reading one file is sufficient to see the trap, it doesn't qualify. If you need to correlate across files or exercise feature-flag combinations, it usually does.
+
+## Prune audit — MANDATORY first pass
+
+Bloat degrades adherence to ALL instructions. Every line competes for a limited instruction budget (~150 total across all context sources). Audit every line of the existing CLAUDE.md. Cut any line where ANY of these apply AND it doesn't qualify under the bar above:
+
+- **Single-file discoverable**: architecture prose, file structure, directory listings, patterns visible by reading one source file or config
+- **Derivable from config**: test runner, linter, build tool, framework conventions a reader finds in package.json / tsconfig / Cargo.toml / etc.
+- **Covered upstream**: facts already stated in a parent CLAUDE.md or \`.claude/rules/\` file
+- **Generic guidance**: "write clean code", "follow conventions", "use types" — Claude already knows
+- **Stale**: references deleted files, renamed symbols, or changed patterns
+- **Descriptive, not preventive**: explains what the code does rather than what silently breaks if ignored
+
+**Stale is worse than missing.** If a rule is contradicted by new evidence but you have no replacement, remove it anyway. If a rule fails the audit, cut it even if today's diff didn't touch it. A successful run is often purely deletions — or deletion of the entire file. Do not manufacture additions to justify running.
+
+**Do not cut content that qualifies under the bar to hit a line count.** The target length is a ceiling, not a quota. If qualifying content pushes you over, leave it.
+
+## Update signals (secondary — run only after the prune pass)
+
+- **Deleted files and renamed symbols**: remove any CLAUDE.md content that references them.
+- **Divergent patterns in changed code**: a modified file contradicts a documented convention — update or remove it.
+- **New constraints or gotchas**: the diff introduces a silent failure mode not yet documented and meeting the bar above — add it.
+- **Mere absence is not contradiction**: existing content today's diff doesn't touch is still subject to the prune audit, but don't remove something just because today's changes didn't re-observe it.
+
+## Tool use constraints
+
+- **Use absolute paths only.** Your shell \`cwd\` is not the target directory — you are running inside a background hook whose working directory is unrelated. Paths in the user prompt are absolute; use them verbatim. Do not \`ls\` or otherwise probe for your environment. Do not try relative paths.
+- **Never spawn Task / sub-agents.** This is a background hook; Task causes investigation loops that hang the worker. Read the listed file(s) with the Read tool, audit the existing CLAUDE.md against the bar, then Write once (or not at all). If you find yourself considering Task to "investigate thoroughly," decide with the evidence you already have.
+- Read the provided changed-files paths and the existing CLAUDE.md path. That is sufficient context. No additional discovery needed.`;
 
 /**
  * Process a single git repository: diff, filter, query, return results.
@@ -427,6 +463,7 @@ async function processRepo(repoCwd, sessionId, processingCache) {
 
     directoriesToProcess.push({
       relativePath,
+      fileDir,
       claudeMdPath,
       hasClaudeMd,
       existingClaudeMd,
@@ -461,6 +498,7 @@ async function processRepo(repoCwd, sessionId, processingCache) {
 
   for (const {
     relativePath,
+    fileDir,
     claudeMdPath,
     hasClaudeMd,
     existingClaudeMd,
@@ -488,20 +526,16 @@ async function processRepo(repoCwd, sessionId, processingCache) {
     }
 
     const systemPrompt = isRoot
-      ? `You are a senior engineer writing a root CLAUDE.md — the persistent context file Claude Code loads every session. Every line competes for context window space, so each must prevent a concrete mistake.
+      ? `You are a senior engineer maintaining a root CLAUDE.md — the persistent context file Claude Code loads every session. Every line competes for context window space. Bloat degrades adherence to every instruction in the file. Your default stance is to cut.
 
-Read the changed files in this directory. Then write or update the CLAUDE.md using the signal hierarchy below.
+${PRUNE_BLOCK}
 
-${UPDATE_SIGNALS_BLOCK}
+## What earns priority when content survives the prune
 
-## What to include (in priority order)
 1. Build, test, lint commands for the 80% case
 2. Constraints and gotchas — what breaks silently if ignored
 3. Architecture — how layers connect, 2-3 sentences max
 4. Conventions that differ from language/framework defaults
-
-## Quality test for every line
-Ask: "Would removing this cause Claude to make a mistake?" If no, cut it.
 
 ## Style
 - Short declarative bullets, not paragraphs
@@ -530,52 +564,53 @@ pnpm db:migrate   # prisma migrate dev (requires DATABASE_URL in .env.local)
 </output>
 </example>
 
-## Output
-Use the Write tool to create/update, or \`rm\` to delete a fully stale CLAUDE.md. Produce no explanatory text.`
-      : `You are auditing a subdirectory for traps that would silently break Claude's work. Subdirectory CLAUDE.md files are expensive — they compete for a limited instruction budget (~150 total instructions across all context sources) and degrade adherence to ALL instructions when bloated. Most directories need no CLAUDE.md at all.
+## Procedure
+1. Read the changed files in this directory to ground yourself in what actually changed.
+2. Read the existing CLAUDE.md line by line. Apply the prune audit to each line. Mark keep/cut based on the bar.
+3. Check for stale references and new traps that meet the bar (but not yet documented).
+4. Use the Write tool once to save the pruned (and updated) file. If nothing survives, delete it. Produce no explanatory text.
 
-Read the changed files. Then decide: does this directory contain something that would cause Claude to silently produce broken code, that is NOT discoverable by reading the source?
+"No change" is only acceptable if every surviving line qualifies under the bar. Staleness-is-zero is not sufficient justification. Equally, do not cut a line that qualifies just to reduce count.`
+      : `You are auditing a subdirectory CLAUDE.md. Subdirectory CLAUDE.md files are expensive: they compete for a limited instruction budget (~150 total across all sources) and degrade adherence to ALL instructions when bloated. Most directories need no CLAUDE.md at all. Your default stance is to cut or delete — but never cut content that qualifies under the bar.
 
-${UPDATE_SIGNALS_BLOCK}
-
-## Step 1: Prune first (always do this when a CLAUDE.md exists)
-
-Before considering additions, audit every existing line. Remove if ANY of these are true:
-- **Derivable from code**: architecture, structure, file listings, patterns discoverable by reading source or types
-- **Derivable from config**: test runner, linter, build tool, framework conventions
-- **Covered upstream**: anything a parent CLAUDE.md or .claude/rules/ file already states
-- **Generic guidance**: "write clean code", "follow conventions", "use types" — Claude knows
-- **Stale**: references deleted files, renamed symbols, or changed patterns
-- **Descriptive, not preventive**: explains what code does rather than what breaks
-
-A successful run may be purely deletions. If nothing survives the prune, delete the entire file. **Stale content is actively harmful** — it competes for the instruction budget and degrades adherence to all other instructions.
-
-## Step 2: The bar for adding content
-
-A line earns its place only if ALL three are true:
-1. Claude would produce **silently broken** code without it (not just suboptimal — broken)
-2. The trap is **not discoverable** by reading the source files, types, parent CLAUDE.md, or .claude/rules/
-3. The fix is **non-obvious** — Claude's default behavior would be wrong
-
-Examples of what qualifies:
+Examples of content that qualifies (memorize the shape):
 - "Import from \`@repo/ui\`, never relative paths into \`packages/ui/src/\` — relative imports build but break at runtime in the monorepo"
 - "\`flush()\` must follow batch \`setState\` calls — without it, updates are silently deferred and never applied"
 - "Migration files must be named \`NNNN_verb_noun.sql\` — the runner silently skips non-matching filenames"
+- "\`furnace.enabled: true\` silently injects \`FURNACE_TRIGGER_URL\` into the core deployment template — tests asserting this var on core need \`furnace.*\` values set"
+- "\`runAsNonRoot\` sits on pod-level \`spec.template.spec.securityContext\`; \`readOnlyRootFilesystem\` sits on container-level — asserting the wrong level silently passes against a null path"
 
-## Output rules
-- **Delete the CLAUDE.md** if nothing survives the prune. This is the expected outcome for most directories.
-- **Do nothing** if no CLAUDE.md exists and there are no silent-breakage traps. Also expected.
-- If worth documenting: Write the CLAUDE.md. Max 15 lines. Terse bullets only. No headers unless grouping 3+ items.
-- Produce no explanatory text.`;
+${PRUNE_BLOCK}
+
+## Procedure
+1. Read the changed files in this directory to ground yourself in what actually changed.
+2. Read the existing CLAUDE.md line by line. Apply the prune audit to each line. Mark keep/cut based on the bar.
+3. Check for new silent-breakage traps that meet the bar.
+4. Commit to the result:
+   - If nothing survives the prune, delete the CLAUDE.md. This is the expected outcome for most directories.
+   - If content survives: Write the pruned file once. Terse bullets only. No headers unless grouping 3+ items.
+   - Produce no explanatory text.
+
+"No change" is only acceptable if every surviving line qualifies under the bar. Do not cut a line that qualifies just to reduce count.`;
 
     const deletionContext = deletedFilesInDir.length > 0
       ? `\nDeleted files: ${deletedFilesInDir.join(', ')}\nIMPORTANT: Remove any CLAUDE.md content that references deleted files, functions, or patterns that no longer exist. Stale documentation is worse than no documentation.\n`
       : '';
 
+    const currentLines = existingClaudeMd ? existingClaudeMd.split('\n').length : 0;
+    const lengthDirective = hasClaudeMd
+      ? (currentLines > targetLines
+          ? `Current: ${currentLines} lines. Target ceiling: ${targetLines}. Likely room to cut — run the full audit. If all surviving content qualifies under the bar, exceeding the target is acceptable; do not cut qualifying traps to hit the number.`
+          : `Current: ${currentLines} lines (within target ceiling of ${targetLines}). Still run the full prune audit — cut anything that fails the audit.`)
+      : `Target ceiling: ${targetLines} lines. Most directories should get 0 lines.`;
+
+    const absoluteChangedPaths = filesInDir.map(({ file }) => join(repoCwd, file));
     const userPrompt = hasClaudeMd
-      ? `Directory: \`${relativePath}\`
-Changed files: ${changedFilesInDir.join(', ')}${deletionContext}
-Target length: ${targetLines} lines (current: ${existingClaudeMd.split('\n').length} lines — trim if over target)
+      ? `Directory: \`${relativePath}\` (absolute: \`${fileDir}\`)
+CLAUDE.md absolute path: \`${claudeMdPath}\`
+Changed files (absolute paths — read these with Read):
+${absoluteChangedPaths.map(p => `- ${p}`).join('\n')}${deletionContext}
+${lengthDirective}
 
 <current_claude_md>
 ${existingClaudeMd}
@@ -583,16 +618,16 @@ ${existingClaudeMd}
 ${hierarchyContext}${customGuidanceContext}
 Directory contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
 
-Read the changed files. First, prune every line in the existing CLAUDE.md that fails the bar — delete the file entirely if nothing survives. Then add only if there are undiscoverable silent-breakage traps.`
-      : `Directory: \`${relativePath}\`
-Changed files: ${changedFilesInDir.join(', ')}${deletionContext}
-Target length: ${targetLines} lines
-
-No CLAUDE.md exists yet.
+Audit every line in <current_claude_md> against the bar. Read each changed file (above) to verify stale references and to check for new traps that qualify. Write the pruned file to \`${claudeMdPath}\` — or delete it if nothing survives.`
+      : `Directory: \`${relativePath}\` (absolute: \`${fileDir}\`)
+CLAUDE.md absolute path (does not exist yet): \`${claudeMdPath}\`
+Changed files (absolute paths — read these with Read):
+${absoluteChangedPaths.map(p => `- ${p}`).join('\n')}${deletionContext}
+${lengthDirective}
 ${hierarchyContext}${customGuidanceContext}
 Directory contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
 
-Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious patterns, constraints, or gotchas worth documenting. Do nothing otherwise.`;
+Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious silent-breakage traps that meet the bar above. Do nothing otherwise.`;
 
     try {
       const result = query({
@@ -608,11 +643,22 @@ Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious
         }
       });
 
-      for await (const _message of result) {
-        // Consume the stream
-      }
+      const PER_DIR_TIMEOUT_MS = 240_000;
+      const consume = (async () => {
+        for await (const _message of result) {
+          // Consume the stream
+        }
+      })();
+      const timeoutHandle = { fired: false };
+      const timeout = new Promise((resolve) => setTimeout(() => { timeoutHandle.fired = true; resolve('timeout'); }, PER_DIR_TIMEOUT_MS));
+      const outcome = await Promise.race([consume.then(() => 'ok'), timeout]);
 
-      appendLog(`[PROCESSED] ${relativePath}`);
+      if (outcome === 'timeout') {
+        appendLog(`[TIMEOUT] ${relativePath}: exceeded ${PER_DIR_TIMEOUT_MS / 1000}s, abandoning stream`);
+        try { if (typeof result.interrupt === 'function') await result.interrupt(); } catch (_err) {}
+      } else {
+        appendLog(`[PROCESSED] ${relativePath}`);
+      }
       markFilesAsHandled(filesInDir, filesHandled);
     } catch (error) {
       appendLog(`[ERROR] ${relativePath}: ${error.message}`);
@@ -673,7 +719,13 @@ async function backgroundWorker() {
   let totalDirectoriesProcessed = 0;
 
   for (const repoCwd of repos) {
-    const result = await processRepo(repoCwd, sessionId, processingCache);
+    let result;
+    try {
+      result = await processRepo(repoCwd, sessionId, processingCache);
+    } catch (error) {
+      appendLog(`[FATAL] processRepo threw for ${repoCwd}: ${error.message}\n${error.stack}`);
+      continue;
+    }
     for (const f of result.changedFileSet) allChangedFiles.add(f);
     for (const [f, sig] of result.filesHandled) allFilesHandled.set(f, sig);
     totalDirectoriesProcessed += result.directoriesProcessed;

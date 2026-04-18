@@ -132,12 +132,8 @@ function getDirectoryInfo(dirPath, cwd) {
   let targetLines;
   if (isRoot) {
     targetLines = '~150';
-  } else if (fileTypes.length > 20 || subdirs.length > 8) {
-    targetLines = '~100';
-  } else if (fileTypes.length < 5 && subdirs.length < 3) {
-    targetLines = '<25';
   } else {
-    targetLines = '~50';
+    targetLines = '<15';
   }
 
   return { fileCount: files.length, fileTypes, subdirs, relativeDirPath, isRoot, targetLines };
@@ -288,6 +284,17 @@ function discoverGitRepos(cwd) {
 
   return repos;
 }
+
+const UPDATE_SIGNALS_BLOCK = `## Update signals
+
+Rank what you see when deciding what to change:
+
+- **Deleted files and renamed symbols (highest)**: explicit overrides. Remove any CLAUDE.md content that references them.
+- **Divergent patterns in changed code**: a modified file contradicts a documented convention. Update or remove the convention.
+- **New constraints or gotchas**: the diff introduces a silent failure mode not yet documented. Add it.
+- **Mere absence is not contradiction**: existing CLAUDE.md content that today's diff simply doesn't touch is still valid. Do not remove it just because this session's changes didn't re-observe it.
+
+Stale is worse than missing. If a rule is contradicted by new evidence but you have no replacement, remove it anyway. A successful update may be purely removals — do not manufacture additions to justify running.`;
 
 /**
  * Process a single git repository: diff, filter, query, return results.
@@ -483,7 +490,9 @@ async function processRepo(repoCwd, sessionId, processingCache) {
     const systemPrompt = isRoot
       ? `You are a senior engineer writing a root CLAUDE.md — the persistent context file Claude Code loads every session. Every line competes for context window space, so each must prevent a concrete mistake.
 
-Read the changed files in this directory. Then write or update the CLAUDE.md. Actively remove stale content — references to deleted files, renamed functions, or patterns that no longer exist. Stale documentation misleads worse than missing documentation.
+Read the changed files in this directory. Then write or update the CLAUDE.md using the signal hierarchy below.
+
+${UPDATE_SIGNALS_BLOCK}
 
 ## What to include (in priority order)
 1. Build, test, lint commands for the 80% case
@@ -523,44 +532,41 @@ pnpm db:migrate   # prisma migrate dev (requires DATABASE_URL in .env.local)
 
 ## Output
 Use the Write tool to create/update, or \`rm\` to delete a fully stale CLAUDE.md. Produce no explanatory text.`
-      : `You are a senior engineer writing a subdirectory CLAUDE.md — loaded on demand when Claude reads files in this directory. Every line competes for context window space, so each must prevent a concrete mistake.
+      : `You are auditing a subdirectory for traps that would silently break Claude's work. Subdirectory CLAUDE.md files are expensive — they compete for a limited instruction budget (~150 total instructions across all context sources) and degrade adherence to ALL instructions when bloated. Most directories need no CLAUDE.md at all.
 
-Read the changed files in this directory to understand what's non-obvious. Then write or update the CLAUDE.md, or do nothing if there's nothing worth documenting. Actively remove stale content — references to deleted files, renamed functions, or patterns that no longer exist. Stale documentation misleads worse than missing documentation. If all content is stale, delete the CLAUDE.md entirely.
+Read the changed files. Then decide: does this directory contain something that would cause Claude to silently produce broken code, that is NOT discoverable by reading the source?
 
-## Include only
-- Silent failure modes: "X silently breaks Y" with what to do instead
-- Ordering constraints: "call A before B or C is permanently lost"
-- Cross-module dependencies not discoverable from a single file
-- Semantic traps: misleading names, asymmetric behavior, types that look similar but differ
+${UPDATE_SIGNALS_BLOCK}
 
-## Exclude — write nothing rather than include these
-- Anything discoverable by reading the source files or type definitions
-- Framework/language conventions Claude already knows
-- Content already covered by a parent CLAUDE.md
-- Per-function API documentation (the code is the authority)
+## Step 1: Prune first (always do this when a CLAUDE.md exists)
 
-## Quality test for every line
-Ask: "Would removing this cause Claude to make a mistake?" If no, cut it.
+Before considering additions, audit every existing line. Remove if ANY of these are true:
+- **Derivable from code**: architecture, structure, file listings, patterns discoverable by reading source or types
+- **Derivable from config**: test runner, linter, build tool, framework conventions
+- **Covered upstream**: anything a parent CLAUDE.md or .claude/rules/ file already states
+- **Generic guidance**: "write clean code", "follow conventions", "use types" — Claude knows
+- **Stale**: references deleted files, renamed symbols, or changed patterns
+- **Descriptive, not preventive**: explains what code does rather than what breaks
 
-## Style
-- Terse bullets, not paragraphs — prefer "X breaks Y" over explaining how X works
-- Pair every prohibition with the correct alternative
-- Group by topic (e.g., "State", "Rendering"), not by filename
+A successful run may be purely deletions. If nothing survives the prune, delete the entire file. **Stale content is actively harmful** — it competes for the instruction budget and degrades adherence to all other instructions.
 
-<example>
-<input>A directory with React components using a custom render pipeline</input>
-<output>
-# components/pipeline
+## Step 2: The bar for adding content
 
-## Render constraints
-- \`useLayoutEffect\` required (not \`useEffect\`) for measurement hooks — \`useEffect\` causes visible frame flicker on mount
-- \`PipelineContext.flush()\` must be called after batch updates — individual \`setState\` calls are deferred until flush
-- \`ref\` callbacks fire before \`onMount\` — accessing \`ref.current\` inside \`onMount\` is safe; accessing it in the render body is not
-</output>
-</example>
+A line earns its place only if ALL three are true:
+1. Claude would produce **silently broken** code without it (not just suboptimal — broken)
+2. The trap is **not discoverable** by reading the source files, types, parent CLAUDE.md, or .claude/rules/
+3. The fix is **non-obvious** — Claude's default behavior would be wrong
 
-## Output
-Use the Write tool if worth documenting. Use \`rm\` to delete a fully stale CLAUDE.md. Produce no output if no changes needed.`;
+Examples of what qualifies:
+- "Import from \`@repo/ui\`, never relative paths into \`packages/ui/src/\` — relative imports build but break at runtime in the monorepo"
+- "\`flush()\` must follow batch \`setState\` calls — without it, updates are silently deferred and never applied"
+- "Migration files must be named \`NNNN_verb_noun.sql\` — the runner silently skips non-matching filenames"
+
+## Output rules
+- **Delete the CLAUDE.md** if nothing survives the prune. This is the expected outcome for most directories.
+- **Do nothing** if no CLAUDE.md exists and there are no silent-breakage traps. Also expected.
+- If worth documenting: Write the CLAUDE.md. Max 15 lines. Terse bullets only. No headers unless grouping 3+ items.
+- Produce no explanatory text.`;
 
     const deletionContext = deletedFilesInDir.length > 0
       ? `\nDeleted files: ${deletedFilesInDir.join(', ')}\nIMPORTANT: Remove any CLAUDE.md content that references deleted files, functions, or patterns that no longer exist. Stale documentation is worse than no documentation.\n`
@@ -577,7 +583,7 @@ ${existingClaudeMd}
 ${hierarchyContext}${customGuidanceContext}
 Directory contents: ${fileTypes.slice(0, 10).join(', ')}${subdirs.length > 0 ? ` | subdirs: ${subdirs.slice(0, 10).join(', ')}` : ''}
 
-Read the changed files, then update \`${claudeMdPath}\` if the current content has generic padding, references deleted/renamed code, is missing important non-obvious patterns from the changed files, or exceeds the target length. Do nothing if already good.`
+Read the changed files. First, prune every line in the existing CLAUDE.md that fails the bar — delete the file entirely if nothing survives. Then add only if there are undiscoverable silent-breakage traps.`
       : `Directory: \`${relativePath}\`
 Changed files: ${changedFilesInDir.join(', ')}${deletionContext}
 Target length: ${targetLines} lines
@@ -595,7 +601,7 @@ Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious
         options: {
           systemPrompt,
           model: "claude-sonnet-4-6",
-          allowedTools: ["Read", "Glob", "Grep", "Write", "Bash(rm:*)"],
+          allowedTools: [],
           permissionMode: "bypassPermissions",
           hooks: {},
           pathToClaudeCodeExecutable: "/opt/homebrew/bin/claude"

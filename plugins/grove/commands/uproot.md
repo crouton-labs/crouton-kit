@@ -8,6 +8,10 @@ argument-hint: <project/name> [--force]
 
 **Arguments:** $ARGUMENTS
 
+```!
+grove uproot --help
+```
+
 ```bash
 grove uproot --force $ARGUMENTS
 ```

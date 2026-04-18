@@ -8,6 +8,11 @@ argument-hint: <source-path> <instance-name> [--slot N]
 
 **Arguments:** $ARGUMENTS
 
+```!
+grove plant --help
+grove register --help
+```
+
 Create an isolated parallel instance of a project with automatic port allocation. Seeded projects (those with `.claude/grove/config.json`) skip discovery and let the CLI handle all post-plant configuration via `setup.sh`. Unseeded projects go through full discovery.
 
 ## Step 1: Parse arguments and check registration

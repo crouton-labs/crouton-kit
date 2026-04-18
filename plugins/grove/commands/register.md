@@ -8,7 +8,9 @@ argument-hint: <path> [--name <name>] [--init <script>] [--port <name:base:offse
 
 **Arguments:** $ARGUMENTS
 
-Register the project so grove can plant instances of it.
+```!
+grove register --help
+```
 
 ```bash
 grove register $ARGUMENTS
@@ -22,34 +24,10 @@ grove register .
 
 After registering, verify with `grove list` and then use `/grove:plant` to create instances.
 
-## Port definitions
+## Port semantics
 
-Ports follow the format `name:base:offset` where the actual port = base + (slot × offset):
+Actual port = `base + (slot × offset)`. Use offset `1` for debug/CDP ports, `100` for everything else.
 
-```
---port core:3068:100 --port gateway:3069:100 --port cdp:9222:1
-```
+## Init script contract
 
-## Init script
-
-Point to a script that sets up new instances. Grove calls it with `<source> <target> <slot> <name>`:
-
-```
---init .claude/scripts/create-env.sh
-```
-
-## Auto-load from config
-
-If the project has `.claude/grove/config.json` (created by `/grove:seed`):
-
-```bash
-grove register <path> --from-config
-```
-
-This reads port definitions, name, excludes, and setup script from the config file. Explicit flags override config values.
-
-To update an existing registration:
-
-```bash
-grove register <path> --from-config --update
-```
+Grove calls the init script as `<script> <source> <target> <slot> <name>`. Seeded projects use `.claude/grove/setup.sh` instead and should be registered with `--from-config`.

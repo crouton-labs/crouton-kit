@@ -5,6 +5,10 @@ argument-hint: [project]
 disable-model-invocation: true
 ---
 
+```!
+grove doctor --help
+```
+
 ```bash
 grove doctor $ARGUMENTS
 ```

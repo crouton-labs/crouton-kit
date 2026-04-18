@@ -8,7 +8,11 @@ argument-hint: <project> <name> <path> [--slot N]
 
 **Arguments:** $ARGUMENTS
 
-Adopt an existing instance directory into grove's registry. Slot number is auto-detected from PORT= values in .env files if not specified.
+```!
+grove adopt --help
+```
+
+Slot number is auto-detected from `PORT=` values in `.env` files if `--slot` is omitted.
 
 ```bash
 grove adopt $ARGUMENTS

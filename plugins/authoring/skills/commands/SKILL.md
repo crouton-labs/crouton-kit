@@ -31,7 +31,7 @@ Prompt content. Set role, constraints, then get out of the way.
 - ` ```! ` fenced block — multi-line bash execution
 - `@path/to/file.ts` — file reference (contents included inline)
 
-Bash execution requires matching `allowed-tools` declarations.
+Inline bash (`` !`...` `` and ` ```! `) runs at **template expansion time** — it does not require `allowed-tools`. The `allowed-tools` field only governs tools the model can call at runtime.
 
 ## Key Rules
 

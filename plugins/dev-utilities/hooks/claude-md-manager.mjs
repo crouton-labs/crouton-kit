@@ -643,7 +643,7 @@ Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious
         }
       });
 
-      const PER_DIR_TIMEOUT_MS = 240_000;
+      const PER_DIR_TIMEOUT_MS = 600_000;
       const consume = (async () => {
         for await (const _message of result) {
           // Consume the stream

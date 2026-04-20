@@ -9328,7 +9328,7 @@ Read the changed files. Create \`${claudeMdPath}\` only if there are non-obvious
           pathToClaudeCodeExecutable: "/opt/homebrew/bin/claude"
         }
       });
-      const PER_DIR_TIMEOUT_MS = 24e4;
+      const PER_DIR_TIMEOUT_MS = 6e5;
       const consume = (async () => {
         for await (const _message of result) {
         }

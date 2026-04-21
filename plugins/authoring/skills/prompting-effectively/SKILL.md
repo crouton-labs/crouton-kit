@@ -7,7 +7,9 @@ description: Structure Claude prompts for clarity and better results using roles
 
 Effective prompts have structure. This skill covers the principles that make prompts clear, reliable, and maintainable — whether you're writing commands, agents, modes, skills, or API system prompts.
 
-For detailed patterns and examples, see [reference.md](reference.md).
+**MANDATORY:** Before authoring any prompt for internal Claude tools (skills, agents, modes, commands, subagent prompts), read [opus-4-7.md](opus-4-7.md) — the Opus 4.7-specific behavior reference. It covers model-specific tuning (effort, tool triggering, literal instruction following, subagent spawning, thinking, agentic patterns) that this architecture overview does not.
+
+For detailed patterns and examples of the architecture principles below, see [reference.md](reference.md).
 
 ## The Two Zones
 

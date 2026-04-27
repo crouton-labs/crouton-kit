@@ -10,9 +10,8 @@ Runs after every Write/Edit/MultiEdit. Has **two severity tiers**:
 
 | Check | Output | Effect |
 |---|---|---|
-| Legacy/compat patterns (`\blegacy\b`, `backward.*compat`, etc.) | `decision: block` + `reason` | Claude-directed; forces Claude to replan |
 | Outdated model names (gpt-4o, claude-3-*, etc.) | `decision: block` + `reason` | Claude-directed; tells Claude to update the model string |
-| TypeScript `any` types, fallback `\|\|`/`??` defaults | `hookSpecificOutput.additionalContext` | Warning only — Claude sees it but isn't forced to retry |
+| Legacy/compat patterns (`\blegacy\b`, `backward.*compat`, etc.), TypeScript `any` types, fallback `\|\|`/`??` defaults | `hookSpecificOutput.additionalContext` | Warning only — Claude sees it but isn't forced to retry |
 
 `PostToolUse` cannot prevent a write from landing on disk; `decision: block` here is feedback that causes Claude to self-correct on its next turn, not a pre-write gate.
 
@@ -24,7 +23,7 @@ Runs after every Write/Edit/MultiEdit. Has **two severity tiers**:
 
 Reads `transcript_path` directly to inspect the last assistant message text — Stop hook input does not include assistant message content, so transcript parsing is required. Catches Claude's natural-language explanations (e.g., "to maintain backwards compatibility…"), not code content. Outputs `systemMessage` (shown to user only, not re-injected into Claude's context) so it's a user alert, not a Claude correction.
 
-**Two-layer enforcement**: `code-quality-checker.py` blocks writes containing compat patterns in *code*; `backwards-compat-warning.py` flags the same patterns in *Claude's reasoning* at Stop. They're independent — both can fire on the same turn.
+**Two-layer enforcement**: `code-quality-checker.py` warns on compat patterns in *file content*; `backwards-compat-warning.py` flags the same patterns in *Claude's reasoning* at Stop. They're independent — both can fire on the same turn.
 
 ## viz-mark-debug.sh + viz-stop-debug.sh (UserPromptSubmit → Stop)
 

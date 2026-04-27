@@ -51,18 +51,17 @@ def check_anthropic_models(content: str) -> list[str]:
     return issues
 
 def check_backwards_compat_patterns(content: str, file_path: str) -> list[str]:
-    """Check for backwards compatibility and legacy patterns - these are BLOCKING errors."""
+    """Check for backwards compatibility and legacy patterns - warnings."""
     issues = []
 
-    # These patterns are NEVER acceptable unless user explicitly requested them
-    blocking_patterns = [
-        (r'\blegacy\b', 'BLOCKED: Legacy code pattern detected'),
-        (r'backward[s]?\s+compatib', 'BLOCKED: Backwards compatibility pattern detected'),
-        (r'\bdeprecated\b', 'BLOCKED: Deprecated pattern detected'),
-        (r'\bcompat(?:ibility)?\s*(?:mode|layer|shim)\b', 'BLOCKED: Compatibility layer detected'),
+    warning_patterns = [
+        (r'\blegacy\b', "WARNING: Legacy code pattern detected. Backwards compatibility shouldn't be added unless the user explicitly asked for it."),
+        (r'backward[s]?\s+compatib', "WARNING: Backwards compatibility pattern detected. Don't preserve old behavior unless the user explicitly asked for it."),
+        (r'\bdeprecated\b', "WARNING: Deprecated pattern detected. Prefer deleting deprecated code over keeping it around."),
+        (r'\bcompat(?:ibility)?\s*(?:mode|layer|shim)\b', "WARNING: Compatibility layer detected. Avoid shims unless the user explicitly asked for one."),
     ]
 
-    for pattern, message in blocking_patterns:
+    for pattern, message in warning_patterns:
         if re.search(pattern, content, re.IGNORECASE):
             issues.append(message)
 
@@ -170,44 +169,13 @@ def main():
     blocking_issues.extend(check_openai_models(content))
     blocking_issues.extend(check_anthropic_models(content))
 
-    # Check for backwards compat / legacy patterns - these are HARD BLOCKS
-    compat_issues = check_backwards_compat_patterns(content, file_path)
-
     # Collect warning issues
     warning_issues = []
+    warning_issues.extend(check_backwards_compat_patterns(content, file_path))
     warning_issues.extend(check_fallback_patterns(content, file_path))
     warning_issues.extend(check_any_type_usage(content, file_path))
 
-    # Handle backwards compat issues - ABORT IMMEDIATELY
-    if compat_issues:
-        error_message = f"""CRITICAL: Unauthorized backwards compatibility or legacy code detected in {file_path}
-
-Detected patterns:
-"""
-        for issue in compat_issues:
-            error_message += f"  - {issue}\n"
-
-        error_message += """
-THIS IS A MISTAKE. You were NOT asked to maintain backwards compatibility or support legacy code.
-
-REQUIRED ACTIONS:
-1. STOP what you are doing immediately
-2. Use the Explore agent to re-examine the codebase and requirements
-3. Replan your implementation WITHOUT any backwards compatibility concerns
-4. Write clean, modern code that breaks existing behavior if needed
-
-Do NOT proceed with this code. Backwards compatibility is NEVER acceptable unless the user EXPLICITLY requested it with words like "maintain compatibility" or "don't break existing code".
-
-If you believe backwards compatibility IS required, ask the user to confirm before proceeding."""
-
-        output = {
-            "decision": "block",
-            "reason": error_message
-        }
-        print(json.dumps(output))
-        sys.exit(0)
-
-    # Handle other blocking issues (models)
+    # Handle blocking issues (models)
     if blocking_issues:
         error_message = f"Code quality issues detected in {file_path}:\n\n"
         for i, issue in enumerate(blocking_issues, 1):

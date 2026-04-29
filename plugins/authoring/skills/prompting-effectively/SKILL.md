@@ -87,6 +87,48 @@ Absolute rules that should not be overridden by context.
 
 Most guidance sits at levels 2–3. Reserve 4–5 for genuine non-negotiables. If everything is CRITICAL, nothing is.
 
+## Subtract Before You Add
+
+When the model produces bad output, scan the prompt for the instruction causing it and delete that instruction. The model has strong defaults — out-of-distribution behaviors (wrapping output in unusual tags, inventing structure, weird formatting) almost always trace back to a prompt that pushed the model there. The fix is subtraction, not addition.
+
+**Worked example.** A tool description read:
+
+> "Task instruction wrapped in `<fork-task>` verbatim."
+
+The model wrapped its output in `<fork-task>` tags because the description told it to. The minimal fix is deletion:
+
+> "The task this fork should execute."
+
+What goes wrong if you skip the delete step:
+
+- **Adding a prohibition while leaving the cause:** keep the "wrapped in `<fork-task>`" instruction, then bolt on *"DO NOT wrap in `<fork-task>` tags."* Now the prompt contradicts itself, and the prohibition primes attention toward the very tags you don't want.
+- **Replacing with a positive description when none was needed:** "One self-contained instruction, e.g. 'Send a DM to Priya.'" Reads fine, but the field name and schema already convey this. You've spent tokens telling the model to write normally — which is what it would have done anyway.
+
+**Order of preference:**
+
+1. **Delete** the instruction causing the misbehavior. Often nothing needs to take its place — the field name, type, or surrounding context already conveys what's expected.
+2. **Rephrase positively** when the field genuinely lacks a description. "DO NOT use ellipses" → "Use periods instead" — describe the target, not its inverse.
+3. **Prohibit** only when you have observed the failure *without* any prompt pushing the model there. Rare. The bar is evidence, not preference.
+
+**When negative framing earns its place:** the model has an observed prior toward the wrong behavior with no prompt cause. "Avoid Inter" works because Opus genuinely defaults to Inter. "Be conservative" in a code review actively suppresses findings (see opus-4-7.md). Otherwise: trust the default.
+
+**Heuristic:** before adding *anything* in response to bad output, find the line in the prompt that caused it. If you find one, delete it and stop. Telling the model to "write normally" or "respond naturally" is a token-burning no-op — it would have done that already if you hadn't told it otherwise.
+
+## Positive Framing
+
+For instructions that survive the subtraction check — genuine deviations from default behavior — describe the target, not its inverse.
+
+**Weak:** "Do not use ellipses."
+**Strong:** "Use periods or commas to end clauses."
+
+The model produces what you describe. "Don't do X" requires the model to represent X in order to avoid it, which can prime the failure mode rather than suppress it. "Do Y" steers directly. This holds across domains:
+
+- Output style: "don't be verbose" → "keep responses to 2–3 sentences for simple questions"
+- Tool use: "don't call this tool unnecessarily" → "call this tool when you see X, Y, or Z"
+- Behavioral guidance: "don't be sycophantic" → "open with the answer, not a compliment"
+
+Concrete positive instructions outperform abstract negative ones, especially in long prompts where any single rule's attention weight is diluted by surrounding context. If you find yourself writing a "don't," ask what the corresponding "do" is — that's usually the better instruction.
+
 ## Examples
 
 **Rules:**
@@ -240,6 +282,7 @@ This is the pattern behind Claude Code skills — descriptions loaded upfront, f
 
 - **Over-formatting** — heavily formatted system prompts produce heavily formatted responses
 - **Instruction-stuffing** — trying to anticipate every edge case with exact steps; teach principles and let the model decide how to apply them
+- **Adding when you should delete** — bad output usually traces back to a prompt instruction pushing the model there. Find the cause and remove it before adding anything new. "Write normally" is not a fix; deleting the line that made it write abnormally is
 - **Flat structure** — long prompts with no XML sections or headers; the model can't locate guidance
 - **XML-everything** — wrapping every paragraph; structural noise dilutes the signal
 - **Missing examples** — "be helpful but not too eager" means nothing without a demonstration

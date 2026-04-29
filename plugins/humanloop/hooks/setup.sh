@@ -1,11 +1,32 @@
 #!/usr/bin/env bash
 #
-# SessionStart hook: installs `termrender` (pip).
+# SessionStart hook: installs `hl` (npm — @crouton-kit/humanloop) and
+# `termrender` (pip). Each is independent; one failing does not block
+# the other. Always exits 0.
 #
 
 set -euo pipefail
 
 messages=()
+
+install_hl() {
+    if command -v hl &>/dev/null; then
+        return 0
+    fi
+
+    if command -v npm &>/dev/null; then
+        npm install -g @crouton-kit/humanloop --silent 2>/dev/null && return 0
+    fi
+    if command -v pnpm &>/dev/null; then
+        pnpm add -g @crouton-kit/humanloop --silent 2>/dev/null && return 0
+    fi
+    if command -v yarn &>/dev/null; then
+        yarn global add @crouton-kit/humanloop --silent 2>/dev/null && return 0
+    fi
+
+    messages+=("hl not installed: no npm/pnpm/yarn found. Install manually: npm install -g @crouton-kit/humanloop")
+    return 1
+}
 
 install_termrender() {
     if command -v termrender &>/dev/null; then
@@ -26,6 +47,7 @@ install_termrender() {
     return 1
 }
 
+install_hl || true
 install_termrender || true
 
 if [[ ${#messages[@]} -gt 0 ]]; then

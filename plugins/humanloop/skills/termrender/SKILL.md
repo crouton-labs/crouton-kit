@@ -20,7 +20,13 @@ cat file.md | termrender       Render from stdin
 
 ## Directives
 
+**Use `:::` (three colons), not `::`.** Two-colon lines are NOT directives — the parser treats them as plain text and they render verbatim. Every fence below opens with at least three colons and closes with the same count.
+
 Directives open with 3+ colons (`:::name{attrs}`, `::::name{attrs}`, etc.) and close with a matching colon count. `:::divider`, `:::progress`, and `:::gauge` are self-closing at top level (no body, no closer needed); every other directive needs an explicit closer.
+
+The available directives are exactly those documented below. Do **not** invent ones not on this list — `tile`, `tab`/`tabs`, `title`, `diagram`, and `table` (with attrs) are not real directives. For tiles use `:::stat`; for diagrams use `:::mermaid`; for tables use plain GFM `| col | col |` syntax with no fence; headings are `#`/`##` markdown.
+
+**Backticks are for code only.** ` ``` ` fences always produce a code block — `` ```mermaid `` and `` ```{name} `` are NOT directives, they render as plain code blocks with `mermaid` or `{name}` as the language label. Every termrender directive uses `:::`.
 
 ### Nesting
 
@@ -41,22 +47,9 @@ For 3 levels use `:::::` → `::::` → `:::`. The extra colons make it visually
 
 **Self-closing caveat:** `divider`, `progress`, and `gauge` are only self-closing at the *top level*. When nested inside another directive, they still need an explicit closer.
 
-### Backtick Fence Directives
-
-Directives can also use backtick fence syntax (MyST standard):
-
-````
-```{panel}
-:title: Hello
-Content here.
-```
-````
-
-Option lines (`:key: value`) set attrs — they go between the opening fence and the body. Inline attrs (`{title="Hello"}`) take precedence over option lines.
-
 ### Option Lines
 
-Both colon and backtick directives support option lines at the top of the body:
+Directives support option lines at the top of the body:
 
 ```
 :::panel
@@ -192,14 +185,15 @@ Status: :badge[stable]{color=green} :badge[v3.2.0]{color=blue}
 Inline pill rendered with colored fg + dim bg, usable inside any paragraph, list item, table cell, or stat caption. Colors: `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`. Defaults to `blue`.
 
 ### Mermaid — ASCII diagrams
-````
-```mermaid
+```
+:::mermaid
 graph TD
     A[Start] --> B{Decision}
     B -->|Yes| C[Action]
     B -->|No| D[End]
+:::
 ```
-````
+Body is standard mermaid source. `` ```mermaid `` is **not** supported — it will render as a plain code block.
 
 ## Mermaid Best Practices
 
@@ -216,8 +210,8 @@ Mermaid diagrams render as ASCII box art — every node becomes a bordered recta
 **Use panels for detail, mermaid for flow.** Don't cram implementation details into node labels. Show the high-level flow in mermaid, then use `:::panel` or `:::columns` below to expand on each step.
 
 **Bad** — too many small nodes, spreads wide:
-````
-```mermaid
+```
+:::mermaid
 graph TD
     A[Boot] --> B[Init services]
     B --> C[Check flag]
@@ -229,19 +223,19 @@ graph TD
     H --> I[Process events]
     H --> J[Upload data]
     H --> K[Refresh config]
+:::
 ```
-````
 
 **Good** — fewer nodes, each tells a story:
-````
-```mermaid
+```
+:::mermaid
 graph TD
     A[Worker boots and<br/>initializes all services] --> B{Feature flag<br/>TAPLINE_ENABLED?}
     B -->|disabled| C[Worker enters idle state,<br/>no pipeline activity]
     B -->|enabled| D[Validates auth token,<br/>fetches whitelist config,<br/>starts capture pipeline]
     D --> E[Pipeline running:<br/>processes CDP events,<br/>uploads captures hourly,<br/>refreshes config]
+:::
 ```
-````
 
 ## Standard Markdown
 
@@ -276,7 +270,7 @@ Write to a temp file first, then render. Validate with `--check` if the document
 | Status note (info/warn/error/success) | `:::callout` |
 | Side-by-side layout | `:::columns` + `:::col` |
 | File / directory hierarchy | `:::tree` |
-| Architecture or flow diagram | mermaid (3–6 nodes — see Mermaid Best Practices) |
+| Architecture or flow diagram | `:::mermaid` (3–6 nodes — see Mermaid Best Practices) |
 
 ## Complete Example
 

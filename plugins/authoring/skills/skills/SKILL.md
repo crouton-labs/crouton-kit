@@ -96,7 +96,7 @@ allowed-tools: Bash(gh *)
 Summarize the above...
 ```
 
-For multi-line commands, open a fenced code block with three backticks followed by `!` (i.e. ` ```! `). Close it with a normal ` ``` ` fence. Each line inside runs as a separate shell command, and Claude sees the combined output.
+For multi-line commands, open a fenced code block whose opener is three backticks immediately followed by `!`, and close it with a normal triple-backtick fence. Each line inside runs as a separate shell command, and Claude sees the combined output.
 
 This is preprocessing, not tool use — bundled and managed skills aren't affected by `disableSkillShellExecution`, but user/project/plugin skills are.
 

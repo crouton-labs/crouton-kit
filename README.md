@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/crouton-labs/crouton-kit/blob/main/.claude-plugin/marketplace.json"><img alt="plugins" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcrouton-labs%2Fcrouton-kit%2Fmain%2F.claude-plugin%2Fmarketplace.json&query=%24.plugins.length&label=plugins"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
 </p>
 
 crouton-kit is a marketplace of plugins for [Claude Code](https://docs.claude.com/en/docs/claude-code). The registry is `.claude-plugin/marketplace.json`, and each plugin is a directory under `plugins/`. A plugin is made of slash commands, background agents, auto-applied rules, lifecycle hooks and skills, in whatever mix it needs.
